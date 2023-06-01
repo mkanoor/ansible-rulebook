@@ -28,6 +28,10 @@ runs:
       shell: bash
       run: python -m pip install -r requirements_test.txt
 
+    - name: Overwrite drools jar
+      shell: bash
+      run: "${GITHUB_WORKSPACE}/.github/actions/setup/overwrite_drools.sh"
+
     - name: Install `ansible.eda` collection
       shell: bash
       run: ansible-galaxy collection install git+https://github.com/ansible/event-driven-ansible
