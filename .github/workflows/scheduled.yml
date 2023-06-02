@@ -2,8 +2,8 @@ name: Scheduled full tests
 
 on:
   schedule:
-    # Run at 10:00 AM/PM UTC
-    - cron: "0 10,22 * * *"
+    # Run every hour
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
