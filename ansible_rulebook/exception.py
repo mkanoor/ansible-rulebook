@@ -146,3 +146,8 @@ class WebSocketExchangeException(Exception):
 class UnsupportedActionException(Exception):
 
     pass
+
+
+class NotAllMatchingPlaybooksFound(Exception):
+
+    pass

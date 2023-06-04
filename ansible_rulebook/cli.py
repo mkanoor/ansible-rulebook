@@ -172,6 +172,23 @@ def get_parser() -> argparse.ArgumentParser:
         "Default is sequential, actions will be run only after the "
         "previous one ends",
     )
+
+    parser.add_argument(
+        "--auto-job-templates",
+        action="store_true",
+        help="Each run_playbook will be converted to run_job_template "
+        "If all playbooks have been found in the controller",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--label",
+        action="append",
+        help="The labels to match in a job template in addition to "
+        "the playbook name",
+        default=[],
+    )
+
     return parser
 
 

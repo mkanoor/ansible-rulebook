@@ -30,6 +30,7 @@ from ansible_rulebook.collection import (
 from ansible_rulebook.common import StartupArgs
 from ansible_rulebook.engine import run_rulesets, start_source
 from ansible_rulebook.job_template_runner import job_template_runner
+from ansible_rulebook.matching_job_templates import MatchingJobTemplates
 from ansible_rulebook.rule_types import RuleSet, RuleSetQueue
 from ansible_rulebook.util import load_inventory
 from ansible_rulebook.validators import Validate
@@ -41,6 +42,7 @@ from ansible_rulebook.websocket import (
 from .exception import (
     ControllerNeededException,
     InventoryNeededException,
+    NotAllMatchingPlaybooksFound,
     RulebookNotFoundException,
     WebSocketExchangeException,
 )
@@ -60,7 +62,7 @@ INVENTORY_ACTIONS = ("run_playbook", "run_module")
 
 # FIXME(cutwater): Replace parsed_args with clear interface
 async def run(parsed_args: argparse.ArgumentParser) -> None:
-
+    matching_job_templates = None
     if parsed_args.worker and parsed_args.websocket_address and parsed_args.id:
         logger.info("Starting worker mode")
         startup_args = await request_workload(
@@ -86,7 +88,26 @@ async def run(parsed_args: argparse.ArgumentParser) -> None:
         startup_args.controller_token = parsed_args.controller_token
         startup_args.controller_ssl_verify = parsed_args.controller_ssl_verify
 
-    validate_actions(startup_args)
+    if parsed_args.auto_job_templates and startup_args.controller_url:
+        playbooks = playbook_list(startup_args)
+        if len(playbooks) > 0:
+            matching_job_templates = MatchingJobTemplates(
+                startup_args.controller_url,
+                startup_args.controller_token,
+                startup_args.controller_ssl_verify,
+                playbooks,
+                parsed_args.label,
+            )
+            await matching_job_templates.get_matches()
+            if not matching_job_templates.all_matched():
+                logger.error(
+                    "Could not find all matching job templates for playbooks"
+                )
+                matching_job_templates.log_mismatches()
+                raise NotAllMatchingPlaybooksFound()
+
+    else:
+        validate_actions(startup_args)
     set_controller_params(startup_args)
 
     if parsed_args.websocket_address:
@@ -121,6 +142,7 @@ async def run(parsed_args: argparse.ArgumentParser) -> None:
         startup_args.variables,
         startup_args.inventory,
         parsed_args,
+        matching_job_templates,
         startup_args.project_data_file,
     )
 
@@ -251,3 +273,13 @@ def set_controller_params(startup_args: StartupArgs) -> None:
         job_template_runner.token = startup_args.controller_token
         if startup_args.controller_ssl_verify:
             job_template_runner.verify_ssl = startup_args.controller_ssl_verify
+
+
+def playbook_list(startup_args: StartupArgs) -> list[str]:
+    result = []
+    for ruleset in startup_args.rulesets:
+        for rule in ruleset.rules:
+            for action in rule.actions:
+                if action.action == "run_playbook":
+                    result.append(action.action_args["name"])
+    return result

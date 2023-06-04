@@ -31,6 +31,7 @@ from ansible_rulebook.collection import (
     has_source_filter,
     split_collection_name,
 )
+from ansible_rulebook.matching_job_templates import MatchingJobTemplates
 from ansible_rulebook.messages import Shutdown
 from ansible_rulebook.rule_set_runner import RuleSetRunner
 from ansible_rulebook.rule_types import (
@@ -223,6 +224,7 @@ async def run_rulesets(
     variables: Dict,
     inventory: str = "",
     parsed_args: argparse.ArgumentParser = None,
+    matching_job_templates: MatchingJobTemplates = None,
     project_data_file: Optional[str] = None,
 ):
     logger.info("run_ruleset")
@@ -265,6 +267,7 @@ async def run_rulesets(
             hosts_facts=hosts_facts,
             variables=variables,
             rule_set=rulesets[ruleset_queue_plan.ruleset.name],
+            matching_job_templates=matching_job_templates,
             project_data_file=project_data_file,
             parsed_args=parsed_args,
             broadcast_method=broadcast,

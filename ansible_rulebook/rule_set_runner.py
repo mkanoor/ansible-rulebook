@@ -33,6 +33,7 @@ from ansible_rulebook.exception import (
     ShutdownException,
     UnsupportedActionException,
 )
+from ansible_rulebook.matching_job_templates import MatchingJobTemplates
 from ansible_rulebook.messages import Shutdown
 from ansible_rulebook.rule_types import (
     Action,
@@ -58,6 +59,7 @@ class RuleSetRunner:
         hosts_facts,
         variables,
         rule_set,
+        matching_job_templates: MatchingJobTemplates,
         project_data_file: Optional[str] = None,
         parsed_args=None,
         broadcast_method=None,
@@ -75,6 +77,7 @@ class RuleSetRunner:
         self.active_actions = set()
         self.broadcast_method = broadcast_method
         self.event_counter = 0
+        self.matching_job_templates = matching_job_templates
 
     async def run_ruleset(self):
         tasks = []
@@ -390,6 +393,16 @@ class RuleSetRunner:
 
                 if "ruleset" not in action_args:
                     action_args["ruleset"] = ruleset
+
+                if (
+                    action == "run_playbook"
+                    and self.matching_job_templates
+                    and self.matching_job_templates.exists(action_args["name"])
+                ):
+                    action_args = self.matching_job_templates.create_args(
+                        action_args["name"], action_args
+                    )
+                    action = "run_job_template"
 
                 await builtin_actions[action](
                     event_log=self.event_log,
