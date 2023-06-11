@@ -102,8 +102,8 @@ def test_actions_sanity(update_environment):
             "'hosts': ['all']",
             f"'inventory': {inventory_data}",
             "'project_data_file': None,",
-            "'ruleset': 'Test actions sanity'",
-            "'source_rule_name': 'debug',",
+            "'rule_set': 'Test actions sanity'",
+            "'rule': 'debug',",
             f"'variables': {{'DEFAULT_EVENT_DELAY': '{DEFAULT_EVENT_DELAY}'",
             f"'DEFAULT_SHUTDOWN_AFTER': '{DEFAULT_SHUTDOWN_AFTER}',",
             f"'DEFAULT_STARTUP_DELAY': '{DEFAULT_STARTUP_DELAY}'",
@@ -123,8 +123,8 @@ def test_actions_sanity(update_environment):
             r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
         )
         expected_debug_regexs = [
-            r"'source_rule_uuid':" + f" '{uuid_regex}'",
-            r"'source_ruleset_uuid':" + f" '{uuid_regex}'",
+            r"'rule_uuid':" + f" '{uuid_regex}'",
+            r"'rule_set_uuid':" + f" '{uuid_regex}'",
             r"'uuid': " + f"'{uuid_regex}'" + r"}}}}",
         ]
 
@@ -177,7 +177,7 @@ def test_actions_sanity(update_environment):
         ), "multiple_action action failed"
 
     assert (
-        len(result.stdout.splitlines()) == 56
+        len(result.stdout.splitlines()) == 55
     ), "unexpected output from the rulebook"
 
 
