@@ -81,3 +81,8 @@ class Debug:
 
         sys.stdout.flush()
         await self.helper.send_default_status()
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await Debug(metadata, control, **action_args)()
+

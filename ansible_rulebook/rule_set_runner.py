@@ -28,19 +28,7 @@ from drools.exceptions import (
 )
 from drools.ruleset import session_stats
 
-from ansible_rulebook.action.control import Control
-from ansible_rulebook.action.debug import Debug
-from ansible_rulebook.action.metadata import Metadata
-from ansible_rulebook.action.noop import Noop
-from ansible_rulebook.action.post_event import PostEvent
-from ansible_rulebook.action.print_event import PrintEvent
-from ansible_rulebook.action.retract_fact import RetractFact
-from ansible_rulebook.action.run_job_template import RunJobTemplate
-from ansible_rulebook.action.run_module import RunModule
-from ansible_rulebook.action.run_playbook import RunPlaybook
-from ansible_rulebook.action.run_workflow_template import RunWorkflowTemplate
-from ansible_rulebook.action.set_fact import SetFact
-from ansible_rulebook.action.shutdown import Shutdown as ShutdownAction
+from ansible_rulebook.action import builtin_actions, Metadata, Control
 from ansible_rulebook.conf import settings
 from ansible_rulebook.exception import (
     ShutdownException,
@@ -61,20 +49,6 @@ from ansible_rulebook.util import (
 )
 
 logger = logging.getLogger(__name__)
-
-ACTION_CLASSES = {
-    "debug": Debug,
-    "print_event": PrintEvent,
-    "none": Noop,
-    "set_fact": SetFact,
-    "post_event": PostEvent,
-    "retract_fact": RetractFact,
-    "shutdown": ShutdownAction,
-    "run_playbook": RunPlaybook,
-    "run_module": RunModule,
-    "run_job_template": RunJobTemplate,
-    "run_workflow_template": RunWorkflowTemplate,
-}
 
 
 class RuleSetRunner:
@@ -356,7 +330,7 @@ class RuleSetRunner:
         action_args = immutable_action_args.copy()
 
         error = None
-        if action in ACTION_CLASSES:
+        if action in builtin_actions:
             try:
                 if (
                     action == "run_job_template"
@@ -434,9 +408,9 @@ class RuleSetRunner:
                     project_data_file=self.project_data_file,
                 )
 
-                await ACTION_CLASSES[action](
+                await builtin_actions[action].main(
                     metadata, control, **action_args
-                )()
+                )
 
             except KeyError as e:
                 logger.error(

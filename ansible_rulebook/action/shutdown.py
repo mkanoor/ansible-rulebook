@@ -57,3 +57,8 @@ class Shutdown:
         raise ShutdownException(
             ShutdownMessage(message=message, delay=delay, kind=kind)
         )
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await Shutdown(metadata, control, **action_args)()
+

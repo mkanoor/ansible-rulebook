@@ -43,3 +43,9 @@ class PrintEvent:
         print_fn(self.helper.control.variables[var_name])
         sys.stdout.flush()
         await self.helper.send_default_status()
+
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await PrintEvent(metadata, control, **action_args)()
+

@@ -44,3 +44,8 @@ class RunModule(RunPlaybook):
 
     def _copy_playbook_files(self, project_dir):
         pass
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await RunModule(metadata, control, **action_args)()
+

@@ -245,3 +245,8 @@ class RunPlaybook:
             logger.debug(stdout.decode())
         if stderr:
             logger.debug(stderr.decode())
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await RunPlaybook(metadata, control, **action_args)()
+
