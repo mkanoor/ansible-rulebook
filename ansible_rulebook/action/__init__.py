@@ -1,20 +1,18 @@
 from . import (
     debug,
-    print_event,
     noop,
     post_event,
+    print_event,
     retract_fact,
-    shutdown,
-    run_playbook,
-    run_module,
     run_job_template,
+    run_module,
+    run_playbook,
     run_workflow_template,
     set_fact,
+    shutdown,
 )
-
-from .metadata import Metadata
 from .control import Control
-
+from .metadata import Metadata
 
 builtin_actions = {
     "debug": debug,
@@ -30,4 +28,4 @@ builtin_actions = {
     "run_workflow_template": run_workflow_template,
 }
 
-__all__ = ['Metadata', 'Control', 'builtin_actions']
+__all__ = ["Metadata", "Control", "builtin_actions"]

@@ -249,4 +249,3 @@ class RunPlaybook:
 
 async def main(metadata: Metadata, control: Control, **action_args):
     await RunPlaybook(metadata, control, **action_args)()
-

@@ -85,4 +85,3 @@ class Debug:
 
 async def main(metadata: Metadata, control: Control, **action_args):
     await Debug(metadata, control, **action_args)()
-

@@ -28,7 +28,7 @@ from drools.exceptions import (
 )
 from drools.ruleset import session_stats
 
-from ansible_rulebook.action import builtin_actions, Metadata, Control
+from ansible_rulebook.action import Control, Metadata, builtin_actions
 from ansible_rulebook.conf import settings
 from ansible_rulebook.exception import (
     ShutdownException,

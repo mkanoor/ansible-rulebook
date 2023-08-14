@@ -36,4 +36,3 @@ class Noop:
 
 async def main(metadata: Metadata, control: Control, **action_args):
     await Noop(metadata, control, **action_args)()
-

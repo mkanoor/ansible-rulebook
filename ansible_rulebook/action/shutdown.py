@@ -61,4 +61,3 @@ class Shutdown:
 
 async def main(metadata: Metadata, control: Control, **action_args):
     await Shutdown(metadata, control, **action_args)()
-

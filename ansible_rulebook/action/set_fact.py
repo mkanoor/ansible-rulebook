@@ -50,4 +50,3 @@ class SetFact:
 
 async def main(metadata: Metadata, control: Control, **action_args):
     await SetFact(metadata, control, **action_args)()
-

@@ -57,7 +57,5 @@ class RetractFact:
         await self.helper.send_default_status()
 
 
-
 async def main(metadata: Metadata, control: Control, **action_args):
     await RetractFact(metadata, control, **action_args)()
-
