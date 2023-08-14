@@ -154,3 +154,7 @@ class RunJobTemplate:
                 f"{self.controller_job['id']}/details"
             )
         return ""
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await RunJobTemplate(metadata, control, **action_args)()

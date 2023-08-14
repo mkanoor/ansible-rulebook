@@ -46,3 +46,7 @@ class SetFact:
             self.helper.embellish_internal_event(self.action_args["fact"]),
         )
         await self.helper.send_default_status()
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await SetFact(metadata, control, **action_args)()

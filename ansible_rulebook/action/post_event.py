@@ -41,3 +41,7 @@ class PostEvent:
             self.helper.embellish_internal_event(self.action_args["event"]),
         )
         await self.helper.send_default_status()
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await PostEvent(metadata, control, **action_args)()

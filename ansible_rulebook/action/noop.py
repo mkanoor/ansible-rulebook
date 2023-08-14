@@ -32,3 +32,7 @@ class Noop:
 
     async def __call__(self):
         await self.helper.send_default_status()
+
+
+async def main(metadata: Metadata, control: Control, **action_args):
+    await Noop(metadata, control, **action_args)()
