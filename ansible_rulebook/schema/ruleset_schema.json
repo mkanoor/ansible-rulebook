@@ -15,27 +15,52 @@
     "$defs": {
         "ruleset": {
             "type": "object",
+            "title": "Ruleset",
+            "description": "A ruleset contains a collection of rules and sources",
             "properties": {
                 "default_events_ttl": {
                     "type": "string",
-                    "pattern": "^\\d+\\s(seconds?|minutes?|hours?|days?)$"
+                    "pattern": "^\\d+\\s(seconds?|minutes?|hours?|days?)$",
+                    "title": "Default events ttl",
+                    "description": "When an event matches one of the conditions in a multi condition rule, we keep the event in cache till all the other conditions are met, by default we keep the events for 2 hours. One can use seconds minutes hours and days for this field",
+                    "examples": [
+                        "2 days",
+                        "23 hours",
+                        "42 seconds",
+                        "1 day",
+                        "1 hour",
+                        "1 minute",
+                        "5 minutes"
+                    ],
+                    "default": "2 hours"
                 },
                 "hosts": {
-                    "type": "string"
+                    "type": "string",
+                    "title": "Hosts",
+                    "description": "The hosts on which the actions should be executed can be further be limited by the hosts defined in the event payload",
+                    "default": "localhost"
                 },
                 "gather_facts": {
                     "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "title": "Gather Facts",
+                    "description": "We can collect ansible artifacts from the hosts specified and insert into the rule engine as facts for later processing, default is false"
                 },
                 "match_multiple_rules": {
                     "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "title": "Match multiple rules",
+                    "description": "When an event is processed should we stop when the event matches the first rule or should we continue processing all the other rules, default is false, we match only a single rule"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "title": "Name of ruleset",
+                    "description": "Each ruleset in a rulebook should have a unique name, since the name is used to post events between running rulesets"
                 },
                 "execution_strategy": {
                     "type": "string",
+                    "title": "Execution Strategy",
+                    "description": "An action is executed when a condition matches in a rule, the execution strategy sspecifies if we should execute actions sequentially one after the other or multiple actions can run in parallel. Default is sequential",
                     "enum": [
                         "parallel",
                         "sequential"
@@ -44,12 +69,16 @@
                 },
                 "sources": {
                     "type": "array",
+                    "title": "Collection of sources",
+                    "description": "A source fetches events from an external source and inserts into the rule engine for evaluation, this node stores a collection of the different sources",
                     "items": {
                         "$ref": "#/$defs/source"
                     }
                 },
                 "rules": {
                     "type": "array",
+                    "title": "Collection of different rules",
+                    "description": "A rule consists of a condition and actions, this node stores a collection of the rules",
                     "items": {
                         "$ref": "#/$defs/rule"
                     }
@@ -58,7 +87,8 @@
             "required": [
                 "hosts",
                 "sources",
-                "rules"
+                "rules",
+                "name"
             ],
             "additionalProperties": false
         },
@@ -66,12 +96,18 @@
             "type": "object",
             "properties": {
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "title": "Name of source",
+                    "description": "Name of the source"
                 },
                 "filters": {
                     "type": "array",
+                    "title": "A array of event filters",
+                    "description": "Event filters allow you to trim the event payload, add additional field, convert keys etc. to the event payload. You can define one or more event filters to an event source",
                     "items": {
-                        "type": "object"
+                        "type": "object",
+                        "title": "Event Filter",
+                        "description": "A custom object specific to the event filter"
                     }
                 }
             },
@@ -88,6 +124,8 @@
         },
         "throttle": {
             "type": "object",
+            "title": "Throttle",
+            "description": "Allows you to handle event storms by limiting how many times within a given time window a rule should be triggered",
             "oneOf": [
                 {
                     "required": [
@@ -105,16 +143,27 @@
             "properties": {
                 "once_within": {
                     "type": "string",
-                    "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$"
+                    "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$",
+                    "title": "Once within",
+                    "description": "Specifies the time interval window within which the events have to occur, the interval can use milliseconds, seconds, minutes, hours and days",
+                    "examples": [
+                        "10 seconds"
+                    ]
                 },
                 "once_after": {
                     "type": "string",
-                    "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$"
+                    "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$",
+                    "title": "Once after",
+                    "description": "Specifies the time interval window where events are received and tracked, after the time window expires if there were any matching events the associated actions are trigerred. The interval can use milliseconds, seconds, minutes, hours and days"
                 },
                 "group_by_attributes": {
                     "type": "array",
+                    "title": "List of attributes from the event payload",
+                    "description": "The group of attributes that create a unique event to be processed in the time window",
                     "items": {
-                        "type": "string"
+                        "type": "string",
+                        "title": "Attribute name",
+                        "description": "Attribute name from the event payload"
                     }
                 }
             },
@@ -122,6 +171,8 @@
         },
         "rule": {
             "type": "object",
+            "title": "Rule",
+            "description": "A rule contains name, condition and 1 action or a group of actions. When there are multiple actions for a rule they are executed one after the other",
             "oneOf": [
                 {
                     "required": [
@@ -142,13 +193,20 @@
                 "name": {
                     "type": "string",
                     "minLength": 1,
+                    "title": "Name",
+                    "description": "The rule name has to be unqiue within a ruleset, its used to identify the rules that are fired in the ruleset",
                     "pattern": "\\S"
                 },
                 "enabled": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "default": true,
+                    "title": "Enable Rule",
+                    "description": "Optionally a rule can be enabled or disabled in a ruleset. The default value is true."
                 },
                 "throttle": {
-                    "$ref": "#/$defs/throttle"
+                    "$ref": "#/$defs/throttle",
+                    "title": "Throttle",
+                    "description": "Optional Throttling options for a rule using once_within or once_after"
                 },
                 "condition": {
                     "anyOf": [
@@ -168,40 +226,53 @@
                 },
                 "actions": {
                     "type": "array",
+                    "title": "A collection of actions",
+                    "description": "When a rule is triggered we can run multiple actions",
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/$defs/run-playbook-action"
+                                "$ref": "#/$defs/run-playbook-action",
+                                "title": "Run playbook"
                             },
                             {
-                                "$ref": "#/$defs/run-module-action"
+                                "$ref": "#/$defs/run-module-action",
+                                "title": "Run module"
                             },
                             {
-                                "$ref": "#/$defs/run-job-template-action"
+                                "$ref": "#/$defs/run-job-template-action",
+                                "title": "Run job template"
                             },
                             {
-                                "$ref": "#/$defs/run-workflow-template-action"
+                                "$ref": "#/$defs/run-workflow-template-action",
+                                "title": "Run workflow template"
                             },
                             {
-                                "$ref": "#/$defs/post-event-action"
+                                "$ref": "#/$defs/post-event-action",
+                                "title": "Post event"
                             },
                             {
-                                "$ref": "#/$defs/set-fact-action"
+                                "$ref": "#/$defs/set-fact-action",
+                                "title": "Set fact"
                             },
                             {
-                                "$ref": "#/$defs/retract-fact-action"
+                                "$ref": "#/$defs/retract-fact-action",
+                                "title": "Retract a fact"
                             },
                             {
-                                "$ref": "#/$defs/print-event-action"
+                                "$ref": "#/$defs/print-event-action",
+                                "title": "Print Event"
                             },
                             {
-                                "$ref": "#/$defs/debug-action"
+                                "$ref": "#/$defs/debug-action",
+                                "title": "Debug"
                             },
                             {
-                                "$ref": "#/$defs/none-action"
+                                "$ref": "#/$defs/none-action",
+                                "title": "No op"
                             },
                             {
-                                "$ref": "#/$defs/shutdown-action"
+                                "$ref": "#/$defs/shutdown-action",
+                                "title": "Shutdown"
                             }
                         ]
                     }
@@ -209,37 +280,48 @@
                 "action": {
                     "oneOf": [
                         {
-                            "$ref": "#/$defs/run-playbook-action"
+                            "$ref": "#/$defs/run-playbook-action",
+                            "title": "Run playbook"
                         },
                         {
-                            "$ref": "#/$defs/run-module-action"
+                            "$ref": "#/$defs/run-module-action",
+                            "title": "Run module"
                         },
                         {
-                            "$ref": "#/$defs/run-job-template-action"
+                            "$ref": "#/$defs/run-job-template-action",
+                            "title": "Run job template"
                         },
                         {
-                            "$ref": "#/$defs/run-workflow-template-action"
+                            "$ref": "#/$defs/run-workflow-template-action",
+                            "title": "Run workflow template"
                         },
                         {
-                            "$ref": "#/$defs/post-event-action"
+                            "$ref": "#/$defs/post-event-action",
+                            "title": "Post internal events"
                         },
                         {
-                            "$ref": "#/$defs/set-fact-action"
+                            "$ref": "#/$defs/set-fact-action",
+                            "title": "Post internal facts"
                         },
                         {
-                            "$ref": "#/$defs/retract-fact-action"
+                            "$ref": "#/$defs/retract-fact-action",
+                            "title": "Retract a fact"
                         },
                         {
-                            "$ref": "#/$defs/print-event-action"
+                            "$ref": "#/$defs/print-event-action",
+                            "title": "Print Event"
                         },
                         {
-                            "$ref": "#/$defs/debug-action"
+                            "$ref": "#/$defs/debug-action",
+                            "title": "Debug"
                         },
                         {
-                            "$ref": "#/$defs/none-action"
+                            "$ref": "#/$defs/none-action",
+                            "title": "No op"
                         },
                         {
-                            "$ref": "#/$defs/shutdown-action"
+                            "$ref": "#/$defs/shutdown-action",
+                            "title": "Shutdown"
                         }
                     ]
                 }
@@ -248,15 +330,25 @@
         },
         "all-condition": {
             "type": "object",
+            "title": "Match all conditions",
+            "description": "A rule can have multiple conditions, and all of them have to match for the rule to trigger",
             "properties": {
                 "all": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "type": "string",
+                        "title": "The condition expression"
                     }
                 },
                 "timeout": {
                     "type": "string",
+                    "title": "Timeout",
+                    "description": "Optionally for a multiple condition you can specify the time window within which all the events have to match. The timeout value can be specified in milliseconds, seconds, minutes, hours and days",
+                    "examples": [
+                        "1 day",
+                        "2 hours",
+                        "10 minutes"
+                    ],
                     "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$"
                 }
             },
@@ -264,6 +356,8 @@
         },
         "not-all-condition": {
             "type": "object",
+            "title": "Not all conditions met",
+            "description": "When you have multiple conditions in a rule, and you want to trigger the rule only if there is atleast 1 or more conditions that have not been met",
             "properties": {
                 "not_all": {
                     "type": "array",
@@ -273,7 +367,14 @@
                 },
                 "timeout": {
                     "type": "string",
-                    "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$"
+                    "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$",
+                    "title": "Timeout",
+                    "description": "Optionally for a multiple condition you can specify the time window within which all the events have to match. The timeout value can be specified in milliseconds, seconds, minutes, hours and days",
+                    "examples": [
+                        "1 day",
+                        "2 hours",
+                        "10 minutes"
+                    ]
                 }
             },
             "required": [
@@ -284,6 +385,8 @@
         },
         "any-condition": {
             "type": "object",
+            "title": "Any condition",
+            "description": "If a rule has multiple condition, you can trigger if any of those conditions are met",
             "properties": {
                 "any": {
                     "type": "array",
@@ -299,24 +402,41 @@
             "properties": {
                 "run_playbook": {
                     "type": "object",
+                    "title": "Run playbook",
+                    "description": "Run an ansible playbook from a collection or one available locally",
                     "properties": {
                         "copy_files": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "title": "Copy files",
+                            "description": "Copy the files from the local directory to the ansible runners project directory, this is only needed if your playbook is local and not part of a collection"
                         },
                         "name": {
-                            "type": "string"
+                            "type": "string",
+                            "title": "Name",
+                            "description": "The name of the playbook, it can be fully qualified collection name (FQCN) or a relative or absolute path to the playbook"
                         },
                         "post_events": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Post the artifacts from the playbook execution as events into the rule engine",
+                            "title": "Post Event"
                         },
                         "set_facts": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Post the artifacts from the playbook execution as facts into the rule engine",
+                            "title": "Set Fact"
                         },
                         "ruleset": {
-                            "type": "string"
+                            "type": "string",
+                            "title": "Ruleset Name",
+                            "description": "When we post_event or set_facts we need the name of the ruleset to which the event should be posted, this is an optional field by default we post to the current running ruleset. If the rulebook has multiple rulesets then this allows you to communicate between the different rulesets by posting events to it"
                         },
                         "verbosity": {
-                            "type": "integer"
+                            "type": "integer",
+                            "title": "Verbosity",
+                            "description": "Verbosity when calling the ansible-runner to execute the playbook"
                         },
                         "var_root": {
                             "type": [
@@ -325,19 +445,31 @@
                             ]
                         },
                         "json_mode": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "title": "JSON Mode",
+                            "description": "Allows the ansible-runner to output logs and messages as JSON"
                         },
                         "retry": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "title": "Retry",
+                            "description": "Retry if the playbook fails execution"
                         },
                         "retries": {
-                            "type": "integer"
+                            "type": "integer",
+                            "title": "Number of retries",
+                            "description": "If the playbook fails for any reason you can optionally retry it"
                         },
                         "delay": {
-                            "type": "number"
+                            "type": "number",
+                            "title": "Delay",
+                            "description": "Delay in seconds between retries"
                         },
                         "extra_vars": {
-                            "type": "object"
+                            "type": "object",
+                            "title": "Extra vars",
+                            "description": "Extra vars to be passed into the playbook"
                         }
                     },
                     "required": [
@@ -459,39 +591,62 @@
         },
         "run-workflow-template-action": {
             "type": "object",
+            "title": "Run Workflow Template",
+            "description": "Run a Workflow Job Template in the Controller",
             "properties": {
                 "run_workflow_template": {
                     "type": "object",
                     "properties": {
                         "name": {
-                            "type": "string"
+                            "type": "string",
+                            "title": "Workflow template name",
+                            "description": "The name of the workflow template defined in the AAP Controller"
                         },
                         "organization": {
-                            "type": "string"
+                            "type": "string",
+                            "default": "Default",
+                            "title": "Organization",
+                            "description": "The name of the organization, default is Default"
                         },
                         "job_args": {
-                            "type": "object"
+                            "type": "object",
+                            "title": "Job Arguments",
+                            "description": "Arguments to pass to the workflow template, please ensure that the Prompt on Launch is enabled for extra vars in the AAP controller for this workflow template"
                         },
                         "post_events": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "title": "Post Events",
+                            "description": "Post the artifacts from the workflow template execution as events into the rule engine"
                         },
                         "set_facts": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "title": "Set Facts ",
+                            "description": "Post the artifacts from the workflow template execution as facts into the rule engine"
                         },
                         "ruleset": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "When we post_event or set_facts we need the name of the ruleset to which the event should be posted, this is an optional field by default we post to the current running ruleset. If the rulebook has multiple rulesets then this allows you to communicate between the different rulesets by posting events to it"
                         },
                         "var_root": {
                             "type": "string"
                         },
                         "retry": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "default": false,
+                            "title": "Retry",
+                            "description": "Retry on workflow template failure"
                         },
                         "retries": {
-                            "type": "integer"
+                            "type": "integer",
+                            "title": "Number of Retries",
+                            "description": "If the workflow template fails, the number of times we should retry the execution"
                         },
                         "delay": {
-                            "type": "integer"
+                            "type": "integer",
+                            "title": "Delay",
+                            "description": "If the workflow template fails, the number of seconds to wait before a retry"
                         }
                     },
                     "required": [
@@ -532,15 +687,20 @@
         },
         "set-fact-action": {
             "type": "object",
+            "title": "Set Fact",
+            "description": "Set a fact into the rule engine",
             "properties": {
                 "set_fact": {
                     "type": "object",
                     "properties": {
                         "ruleset": {
-                            "type": "string"
+                            "type": "string",
+                            "title": "The name of the ruleset to post the fact to, the default is the current ruleset"
                         },
                         "fact": {
-                            "type": "object"
+                            "type": "object",
+                            "title": "Fact object",
+                            "description": "The fact object with attribute and value pairs"
                         }
                     },
                     "required": [
@@ -556,19 +716,27 @@
         },
         "retract-fact-action": {
             "type": "object",
+            "title": "Retract Fact",
+            "description": "Retract a fact from the rule engine storage",
             "properties": {
                 "retract_fact": {
                     "type": "object",
                     "properties": {
                         "ruleset": {
-                            "type": "string"
+                            "type": "string",
+                            "title": "Ruleset Name",
+                            "description": "An optional ruleset name from the rulebook from which the fact should be retracted, default is the current ruleset"
                         },
                         "fact": {
-                            "type": "object"
+                            "type": "object",
+                            "title": "Fact to retract",
+                            "description": "The fact object to retract"
                         },
                         "partial": {
                             "type": "boolean",
-                            "default": true
+                            "default": true,
+                            "title": "Partial fact",
+                            "description": "Most of the time when a fact is retracted you don't have to list the entire fact, you can just use a partial object and the rule engine will retract all matching facts"
                         }
                     },
                     "required": [
@@ -584,6 +752,8 @@
         },
         "print-event-action": {
             "type": "object",
+            "title": "Print Event",
+            "description": "The print event action",
             "properties": {
                 "print_event": {
                     "type": [
@@ -598,7 +768,9 @@
                             ]
                         },
                         "pretty": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "title": "Pretty",
+                            "description": "Print the event in pretty format"
                         }
                     },
                     "additionalProperties": false
@@ -611,6 +783,8 @@
         },
         "debug-msg": {
             "type": "object",
+            "title": "Debug Messages",
+            "description": "The debug action can contain optional message",
             "properties": {
                 "msg": {
                     "anyOf": [
@@ -630,6 +804,8 @@
         },
         "debug-var": {
             "type": "object",
+            "title": "Debug variable",
+            "description": "The variable from the event payload to print",
             "properties": {
                 "var": {
                     "type": "string"
@@ -639,6 +815,8 @@
         },
         "debug-action": {
             "type": "object",
+            "title": "Debug Action",
+            "description": "The debug action, can be used to display custom message or specific attribute from the event",
             "properties": {
                 "debug": {
                     "anyOf": [
@@ -661,6 +839,8 @@
         },
         "none-action": {
             "type": "object",
+            "title": "No Op",
+            "description": "Place holder no-op action",
             "properties": {
                 "none": {
                     "type": [
@@ -676,6 +856,8 @@
         },
         "shutdown-action": {
             "type": "object",
+            "description": "The shutdown action allows you to terminate a running ruleset, if there are multiple rulesets in a rulebook they would all be terminated",
+            "title": "Shutdown Action",
             "properties": {
                 "shutdown": {
                     "type": [
@@ -684,13 +866,20 @@
                     ],
                     "properties": {
                         "delay": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Time to wait in seconds before shutting down the ruleset",
+                            "title": "Delay in seconds"
                         },
                         "message": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Optional Shutdown Message",
+                            "title": "Message"
                         },
                         "kind": {
                             "type": "string",
+                            "title": "Kind of shutdown",
+                            "default": "kind",
+                            "description": "The kind of shutdown you can choose between graceful shutdown which allows for a delay and now which shutsdown without any delay",
                             "enum": [
                                 "graceful",
                                 "now"
