@@ -343,8 +343,7 @@
                 "all": {
                     "type": "array",
                     "items": {
-                        "type": "string",
-                        "title": "The condition expression"
+                        "$ref": "#/$defs/inline-string-condition"
                     }
                 },
                 "timeout": {
@@ -369,7 +368,7 @@
                 "not_all": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/$defs/inline-string-condition"
                     }
                 },
                 "timeout": {
@@ -398,7 +397,7 @@
                 "any": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/$defs/inline-string-condition"
                     }
                 }
             },
