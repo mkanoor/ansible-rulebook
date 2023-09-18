@@ -10,8 +10,7 @@
     "minItems": 1,
     "examples": [
         "rulebooks/*.yml",
-        "rulebooks/*.yaml",
-        "rules.yml"
+        "rulebooks/*.yaml"
     ],
     "$defs": {
         "ruleset": {
@@ -59,7 +58,8 @@
             "required": [
                 "hosts",
                 "sources",
-                "rules"
+                "rules",
+                "name"
             ],
             "additionalProperties": false
         },
