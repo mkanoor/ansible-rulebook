@@ -60,7 +60,7 @@
                 "execution_strategy": {
                     "type": "string",
                     "title": "Execution Strategy",
-                    "description": "An action is executed when a condition matches in a rule, the execution strategy sspecifies if we should execute actions sequentially one after the other or multiple actions can run in parallel. Default is sequential",
+                    "description": "An action is executed when a condition matches in a rule, the execution strategy specifies if we should execute actions sequentially one after the other or multiple actions can run in parallel. Default is sequential",
                     "enum": [
                         "parallel",
                         "sequential"
@@ -154,7 +154,7 @@
                     "type": "string",
                     "pattern": "^\\d+\\s(milliseconds?|seconds?|minutes?|hours?|days?)$",
                     "title": "Once after",
-                    "description": "Specifies the time interval window where events are received and tracked, after the time window expires if there were any matching events the associated actions are trigerred. The interval can use milliseconds, seconds, minutes, hours and days"
+                    "description": "Specifies the time interval window where events are received and tracked, after the time window expires if there were any matching events the associated actions are triggered. The interval can use milliseconds, seconds, minutes, hours and days"
                 },
                 "group_by_attributes": {
                     "type": "array",
@@ -194,7 +194,7 @@
                     "type": "string",
                     "minLength": 1,
                     "title": "Name",
-                    "description": "The rule name has to be unqiue within a ruleset, its used to identify the rules that are fired in the ruleset",
+                    "description": "The rule name has to be unique within a ruleset, its used to identify the rules that are fired in the ruleset",
                     "pattern": "\\S"
                 },
                 "enabled": {
@@ -333,7 +333,7 @@
         "inline-string-condition": {
             "type": "string",
             "title": "Condition String",
-            "description": "A single inline string condition, you can use one of the operators to create a logical expression that evaluates to true or false [notes](https://ansible.readthedocs.io/projects/rulebook/en/latest/conditions.html#supported-operators)"
+            "description": "A single inline string condition, you can use one of the operators to create a logical expression that evaluates to true or false. examples here (https://ansible.readthedocs.io/projects/rulebook/en/latest/conditions.html#supported-operators)"
         },
         "all-condition": {
             "type": "object",
@@ -363,7 +363,7 @@
         "not-all-condition": {
             "type": "object",
             "title": "Not all conditions met",
-            "description": "When you have multiple conditions in a rule, and you want to trigger the rule only if there is atleast 1 or more conditions that have not been met",
+            "description": "When you have multiple conditions in a rule, and you want to trigger the rule only if there is at least 1 or more conditions that have not been met",
             "properties": {
                 "not_all": {
                     "type": "array",
@@ -885,7 +885,7 @@
                             "type": "string",
                             "title": "Kind of shutdown",
                             "default": "kind",
-                            "description": "The kind of shutdown you can choose between graceful shutdown which allows for a delay and now which shutsdown without any delay",
+                            "description": "The kind of shutdown you can choose between graceful shutdown which allows for a delay and now which shuts down without any delay",
                             "enum": [
                                 "graceful",
                                 "now"
