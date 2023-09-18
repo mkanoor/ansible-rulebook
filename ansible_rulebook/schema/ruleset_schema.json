@@ -211,7 +211,9 @@
                 "condition": {
                     "anyOf": [
                         {
-                            "type": "string"
+                            "type": "string",
+                            "title": "Inline condition",
+                            "description": "A single inline string condition, which can compare using one of the operators"
                         },
                         {
                             "$ref": "#/$defs/all-condition"
@@ -278,6 +280,8 @@
                     }
                 },
                 "action": {
+                    "title": "A single action",
+                    "description": "When a rule is triggered we can a single action",
                     "oneOf": [
                         {
                             "$ref": "#/$defs/run-playbook-action",
