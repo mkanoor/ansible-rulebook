@@ -211,9 +211,7 @@
                 "condition": {
                     "anyOf": [
                         {
-                            "type": "string",
-                            "title": "Inline condition",
-                            "description": "A single inline string condition, which can compare using one of the operators"
+                            "$ref": "#/$defs/inline-string-condition"
                         },
                         {
                             "$ref": "#/$defs/all-condition"
@@ -331,6 +329,11 @@
                 }
             },
             "additionalProperties": false
+        },
+        "inline-string-condition": {
+            "type": "string",
+            "title": "Condition String",
+            "description": "A single inline string condition, you can use one of the operators to create a logical expression that evaluates to true or false"
         },
         "all-condition": {
             "type": "object",
