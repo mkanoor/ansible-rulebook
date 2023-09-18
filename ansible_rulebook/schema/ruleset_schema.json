@@ -10,7 +10,8 @@
     "minItems": 1,
     "examples": [
         "rulebooks/*.yml",
-        "rulebooks/*.yaml"
+        "rulebooks/*.yaml",
+        "rules.yml"
     ],
     "$defs": {
         "ruleset": {
