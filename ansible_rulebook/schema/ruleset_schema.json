@@ -333,7 +333,7 @@
         "inline-string-condition": {
             "type": "string",
             "title": "Condition String",
-            "description": "A single inline string condition, you can use one of the operators to create a logical expression that evaluates to true or false"
+            "description": "A single inline string condition, you can use one of the operators to create a logical expression that evaluates to true or false [notes](https://ansible.readthedocs.io/projects/rulebook/en/latest/conditions.html#supported-operators)"
         },
         "all-condition": {
             "type": "object",
