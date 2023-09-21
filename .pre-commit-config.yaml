@@ -1,6 +1,10 @@
 ---
 exclude: "^docs/"
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.4.0
+    hooks:
+      -   id: check-json
   - repo: https://github.com/psf/black
     rev: 22.6.0
     hooks:
@@ -15,18 +19,6 @@ repos:
       - id: flake8
         additional_dependencies:
           - flake8-bugbear
-  - repo: local
-    language: javascript
-    hooks:
-      - id: ajv
-        name: ajv
-        description: Validate JSON schema
-        language: node
-        types: [json]
-        files: ^ansible_rulebook/schema/ruleset_schema.json$
-        additional_dependencies:
-          - ajv-cli
-        entry: ajv compile -s
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
