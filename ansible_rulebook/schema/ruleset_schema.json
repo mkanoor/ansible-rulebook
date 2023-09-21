@@ -1105,13 +1105,13 @@
                             "type": "boolean"
                         }
                     ]
-                },
-                "additionalProperties": false,
-                "required": [
-                    "lhs",
-                    "rhs"
-                ]
-            }
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "lhs",
+                "rhs"
+            ]
         }
     }
 }
