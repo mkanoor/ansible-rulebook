@@ -967,63 +967,63 @@
             "description": "Compare 2 expressions",
             "properties": {
                 "lhs": {
-                    "oneOf": [
-                        {
-                            "$ref": "#/$defs/EventObject"
-                        },
-                        {
-                            "$ref": "#/$defs/FactObject"
-                        },
-                        {
-                            "$ref": "#/$defs/EventsObject"
-                        },
-                        {
-                            "$ref": "#/$defs/FactsObject"
-                        },
-                        {
-                            "type": "string"
-                        },
-                        {
-                            "type": "integer"
-                        },
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "boolean"
-                        }
-                    ]
+                    "$ref": "#/$defs/all_types"
                 },
                 "rhs": {
-                    "oneOf": [
-                        {
-                            "$ref": "#/$defs/EventObject"
-                        },
-                        {
-                            "$ref": "#/$defs/FactObject"
-                        },
-                        {
-                            "$ref": "#/$defs/EventsObject"
-                        },
-                        {
-                            "$ref": "#/$defs/FactsObject"
-                        },
-                        {
-                            "type": "string"
-                        },
-                        {
-                            "type": "integer"
-                        },
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "boolean"
-                        }
-                    ]
+                    "$ref": "#/$defs/all_types"
                 }
             },
             "additionalProperties": false
+        },
+        "all_types": {
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/EventObject"
+                },
+                {
+                    "$ref": "#/$defs/FactObject"
+                },
+                {
+                    "$ref": "#/$defs/EventsObject"
+                },
+                {
+                    "$ref": "#/$defs/FactsObject"
+                },
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "number"
+                },
+                {
+                    "type": "boolean"
+                }
+            ]
+        },
+        "numeric_fields": {
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/EventObject"
+                },
+                {
+                    "$ref": "#/$defs/FactObject"
+                },
+                {
+                    "$ref": "#/$defs/EventsObject"
+                },
+                {
+                    "$ref": "#/$defs/FactsObject"
+                },
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "number"
+                }
+            ]
         }
     }
 }
