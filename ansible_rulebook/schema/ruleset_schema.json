@@ -351,6 +351,22 @@
                             {
                                 "$ref": "#/$defs/EqualsExpression",
                                 "title": "Expression object with individual properties"
+                            },
+                            {
+                                "$ref": "#/$defs/GreaterThanExpression",
+                                "title": "Expression object greater than check"
+                            },
+                            {
+                                "$ref": "#/$defs/GreaterThanEqualExpression",
+                                "title": "Expression object greater than equal check"
+                            },
+                            {
+                                "$ref": "#/$defs/LessThanEqualExpression",
+                                "title": "Expression object less than equal check"
+                            },
+                            {
+                                "$ref": "#/$defs/LessThanExpression",
+                                "title": "Expression object less than check"
                             }
                         ]
                     }
@@ -964,9 +980,10 @@
         "EqualsExpression": {
             "type": "object",
             "additionalProperties": false,
+            "description": "Check if 2 values are equal",
             "properties": {
                 "EqualsExpression": {
-                    "$ref": "#/$defs/equals-expression"
+                    "$ref": "#/$defs/binary-expression"
                 }
             },
             "required": [
@@ -974,12 +991,70 @@
             ],
             "title": "EqualsExpression"
         },
-        "equals-expression": {
+        "GreaterThanExpression": {
             "type": "object",
-            "title": "Equals Expression",
-            "description": "Compare 2 expressions",
+            "additionalProperties": false,
+            "description": "Check if left hand side value is greater than right hand side value",
+            "properties": {
+                "GreaterThanExpression": {
+                    "$ref": "#/$defs/binary-expression"
+                }
+            },
+            "required": [
+                "GreaterThanExpression"
+            ],
+            "title": "GreaterThanExpression"
+        },
+        "LessThanExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if left hand side value is less than right hand side value",
+            "properties": {
+                "LessThanExpression": {
+                    "$ref": "#/$defs/binary-expression"
+                }
+            },
+            "required": [
+                "LessThanExpression"
+            ],
+            "title": "LessThanExpression"
+        },
+        "LessThanEqualExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if left hand side value is less than or equal to right hand side value",
+            "properties": {
+                "LessThanEqualExpression": {
+                    "$ref": "#/$defs/binary-expression"
+                }
+            },
+            "required": [
+                "LessThanEqualExpression"
+            ],
+            "title": "LessThanEqualExpression"
+        },
+        "GreaterThanEqualExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if left hand side value is greater than or equal to right hand side value",
+            "properties": {
+                "GreaterThanEqualExpression": {
+                    "$ref": "#/$defs/binary-expression"
+                }
+            },
+            "required": [
+                "GreaterThanEqualExpression"
+            ],
+            "title": "GreaterThanEqualExpression"
+        },
+        "binary-expression": {
+            "type": "object",
+            "title": "Binary Expression",
+            "description": "Requires a left hand side and a right hand side values to compare",
             "properties": {
                 "lhs": {
+                    "title": "Right hand side value",
+                    "description": "Pick one of the right hand side values",
                     "oneOf": [
                         {
                             "$ref": "#/$defs/EventObject"
@@ -995,9 +1070,6 @@
                         },
                         {
                             "type": "string"
-                        },
-                        {
-                            "type": "integer"
                         },
                         {
                             "type": "number"
@@ -1008,6 +1080,8 @@
                     ]
                 },
                 "rhs": {
+                    "title": "Right hand side value",
+                    "description": "Pick one of the right hand side values",
                     "oneOf": [
                         {
                             "$ref": "#/$defs/EventObject"
@@ -1023,9 +1097,6 @@
                         },
                         {
                             "type": "string"
-                        },
-                        {
-                            "type": "integer"
                         },
                         {
                             "type": "number"
