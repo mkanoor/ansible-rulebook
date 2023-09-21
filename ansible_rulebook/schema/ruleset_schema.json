@@ -349,7 +349,7 @@
                                 "title": "Condition expression written as string"
                             },
                             {
-                                "$ref": "#/$defs/EqualsExpression",
+                                "$ref": "#/$defs/equals-expression",
                                 "title": "Expression object with individual properties"
                             }
                         ]
@@ -961,7 +961,7 @@
             },
             "additionalProperties": false
         },
-        "EqualsExpression": {
+        "equals-expression": {
             "type": "object",
             "title": "Equals Expression",
             "description": "Compare 2 expressions",
@@ -1021,9 +1021,9 @@
                             "type": "boolean"
                         }
                     ]
-                }
-            },
-            "additionalProperties": false
+                },
+                "additionalProperties": false
+            }
         }
     }
 }
