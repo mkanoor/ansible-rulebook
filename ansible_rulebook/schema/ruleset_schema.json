@@ -350,18 +350,22 @@
                             },
                             {
                                 "$ref": "#/$defs/EqualsExpression",
-                                "title": "Expression object with individual properties"
+                                "title": "Equals Expression"
+                            },
+                            {
+                                "$ref": "#/$defs/NotEqualsExpression",
+                                "title": "Not Equals Expression"
                             },
                             {
                                 "$ref": "#/$defs/GreaterThanExpression",
                                 "title": "Expression object greater than check"
                             },
                             {
-                                "$ref": "#/$defs/GreaterThanEqualExpression",
+                                "$ref": "#/$defs/GreaterThanOrEqualExpression",
                                 "title": "Expression object greater than equal check"
                             },
                             {
-                                "$ref": "#/$defs/LessThanEqualExpression",
+                                "$ref": "#/$defs/LessThanOrEqualExpression",
                                 "title": "Expression object less than equal check"
                             },
                             {
@@ -991,6 +995,48 @@
             ],
             "title": "EqualsExpression"
         },
+        "AdditionExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Add 2 values",
+            "properties": {
+                "AdditionExpression": {
+                    "$ref": "#/$defs/math-binary-expression"
+                }
+            },
+            "required": [
+                "AdditionExpression"
+            ],
+            "title": "AdditionExpression"
+        },
+        "SubtractionExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Subtract 2 values",
+            "properties": {
+                "SubtractionExpression": {
+                    "$ref": "#/$defs/math-binary-expression"
+                }
+            },
+            "required": [
+                "SubtractionExpression"
+            ],
+            "title": "SubtractionExpression"
+        },
+        "NotEqualsExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if 2 values are not equal",
+            "properties": {
+                "EqualsExpression": {
+                    "$ref": "#/$defs/binary-expression"
+                }
+            },
+            "required": [
+                "NotEqualsExpression"
+            ],
+            "title": "NotEqualsExpression"
+        },
         "GreaterThanExpression": {
             "type": "object",
             "additionalProperties": false,
@@ -1019,33 +1065,33 @@
             ],
             "title": "LessThanExpression"
         },
-        "LessThanEqualExpression": {
+        "LessThanOrEqualExpression": {
             "type": "object",
             "additionalProperties": false,
             "description": "Check if left hand side value is less than or equal to right hand side value",
             "properties": {
-                "LessThanEqualExpression": {
+                "LessThanOrEqualExpression": {
                     "$ref": "#/$defs/binary-expression"
                 }
             },
             "required": [
-                "LessThanEqualExpression"
+                "LessThanOrEqualExpression"
             ],
-            "title": "LessThanEqualExpression"
+            "title": "LessThanOrEqualExpression"
         },
-        "GreaterThanEqualExpression": {
+        "GreaterThanOrEqualExpression": {
             "type": "object",
             "additionalProperties": false,
             "description": "Check if left hand side value is greater than or equal to right hand side value",
             "properties": {
-                "GreaterThanEqualExpression": {
+                "GreaterThanOrEqualExpression": {
                     "$ref": "#/$defs/binary-expression"
                 }
             },
             "required": [
-                "GreaterThanEqualExpression"
+                "GreaterThanOrEqualExpression"
             ],
-            "title": "GreaterThanEqualExpression"
+            "title": "GreaterThanOrEqualExpression"
         },
         "binary-expression": {
             "type": "object",
@@ -1103,6 +1149,66 @@
                         },
                         {
                             "type": "boolean"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "lhs",
+                "rhs"
+            ]
+        },
+        "math-binary-expression": {
+            "type": "object",
+            "title": "Math Binary Expression",
+            "description": "Requires a left hand side and a right hand side values to add or subtract",
+            "properties": {
+                "lhs": {
+                    "title": "Right hand side value",
+                    "description": "Pick one of the right hand side values",
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/EventObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactObject"
+                        },
+                        {
+                            "$ref": "#/$defs/EventsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactsObject"
+                        },
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ]
+                },
+                "rhs": {
+                    "title": "Right hand side value",
+                    "description": "Pick one of the right hand side values",
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/EventObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactObject"
+                        },
+                        {
+                            "$ref": "#/$defs/EventsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactsObject"
+                        },
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "number"
                         }
                     ]
                 }
