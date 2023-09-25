@@ -353,8 +353,24 @@
                                 "title": "Condition expression written as string"
                             },
                             {
+                                "$ref": "#/$defs/SearchMatchesExpression",
+                                "title": "Search Matches Expression"
+                            },
+                            {
+                                "$ref": "#/$defs/SearchNotMatchesExpression",
+                                "title": "Search Not Matches Expression"
+                            },
+                            {
                                 "$ref": "#/$defs/EqualsExpression",
                                 "title": "Equals Expression"
+                            },
+                            {
+                                "$ref": "#/$defs/IsDefinedExpression",
+                                "title": "Is Defined Expression"
+                            },
+                            {
+                                "$ref": "#/$defs/IsNotDefinedExpression",
+                                "title": "Is not Defined Expression"
                             },
                             {
                                 "$ref": "#/$defs/ItemInListExpression",
@@ -391,6 +407,14 @@
                             {
                                 "$ref": "#/$defs/LessThanExpression",
                                 "title": "Expression object less than check"
+                            },
+                            {
+                                "$ref": "#/$defs/AndExpression",
+                                "title": "Compound Expression object where both expressions have to be true"
+                            },
+                            {
+                                "$ref": "#/$defs/OrExpression",
+                                "title": "Compound Expression object where one expression has to be true"
                             }
                         ]
                     }
@@ -1054,6 +1078,62 @@
             ],
             "title": "EqualsExpression"
         },
+        "IsDefinedExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if an event attribute is defined",
+            "properties": {
+                "IsDefinedExpression": {
+                    "$ref": "#/$defs/EventObject"
+                }
+            },
+            "required": [
+                "IsDefinedExpression"
+            ],
+            "title": "IsDefinedExpression"
+        },
+        "IsNotDefinedExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if an event attribute is not defined",
+            "properties": {
+                "IsNotDefinedExpression": {
+                    "$ref": "#/$defs/EventObject"
+                }
+            },
+            "required": [
+                "IsNotDefinedExpression"
+            ],
+            "title": "IsNotDefinedExpression"
+        },
+        "SearchMatchesExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A search expression",
+            "properties": {
+                "SearchMatchesExpression": {
+                    "$ref": "#/$defs/search-match-expression"
+                }
+            },
+            "required": [
+                "SearchMatchesExpression"
+            ],
+            "title": "SearchMatchesExpression"
+        },
+        "SearchNotMatchesExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A search expression that doesn't match",
+            "properties": {
+                "SearchNotMatchesExpression": {
+                    "$ref": "#/$defs/search-match-expression"
+                }
+            },
+            "required": [
+                "SearchNotMatchesExpression"
+            ],
+            "title": "SearchNotMatchesExpression"
+        },
         "AssignmentExpression": {
             "type": "object",
             "additionalProperties": false,
@@ -1123,6 +1203,39 @@
                 "ListNotContainsItemExpression"
             ],
             "title": "ListNotContainsItemExpression"
+        },
+        "search-match-expression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Save the matching event for an expression",
+            "properties": {
+                "lhs": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/EventObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactObject"
+                        },
+                        {
+                            "$ref": "#/$defs/EventsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/StringObject"
+                        }
+                    ]
+                },
+                "rhs": {
+                    "$ref": "#/$defs/SearchTypeObject"
+                }
+            },
+            "required": [
+                "lhs",
+                "rhs"
+            ]
         },
         "assignment-expression": {
             "type": "object",
@@ -1285,6 +1398,34 @@
             ],
             "title": "GreaterThanOrEqualExpression"
         },
+        "AndExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "All expressions have to match",
+            "properties": {
+                "AndExpression": {
+                    "$ref": "#/$defs/logical-binary-expression"
+                }
+            },
+            "required": [
+                "AndExpression"
+            ],
+            "title": "AndExpression"
+        },
+        "OrExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "One expression has to match",
+            "properties": {
+                "OrExpression": {
+                    "$ref": "#/$defs/logical-binary-expression"
+                }
+            },
+            "required": [
+                "OrExpression"
+            ],
+            "title": "OrExpression"
+        },
         "list-expression": {
             "type": "object",
             "title": "List Expression",
@@ -1352,6 +1493,88 @@
                 "rhs"
             ]
         },
+        "SearchTypeObject": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "search using regex, match, search",
+            "properties": {
+                "SearchType": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "type": "object",
+                            "title": "kind of search",
+                            "description": "The kind can be either search (to look at the beginning of string), match(anywhere in the string), or regex",
+                            "properties": {
+                                "String": {
+                                    "type": "string",
+                                    "enum": [
+                                        "search",
+                                        "match",
+                                        "regex"
+                                    ]
+                                }
+                            }
+                        },
+                        "pattern": {
+                            "type": "object",
+                            "title": "Search Pattern",
+                            "description": "the pattern to search for",
+                            "properties": {
+                                "String": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "options": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/search-options"
+                            }
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "pattern"
+                    ],
+                    "title": "SearchType"
+                },
+                "required": [
+                    "SearchType"
+                ]
+            }
+        },
+        "search-options": {
+            "type": "object",
+            "title": "Search Options",
+            "description": "One or more of the options for search",
+            "properties": {
+                "name": {
+                    "title": "Option Name",
+                    "description": "The name of the option",
+                    "type": "object",
+                    "properties": {
+                        "String": {
+                            "type": "string",
+                            "enum": [
+                                "ignorecase",
+                                "multiline"
+                            ]
+                        }
+                    }
+                },
+                "value": {
+                    "title": "Option Value",
+                    "description": "The value of the option",
+                    "type": "object",
+                    "properties": {
+                        "Boolean": {
+                            "type": "boolean"
+                        }
+                    }
+                }
+            }
+        },
         "contain-expression": {
             "type": "object",
             "title": "List Contains Expression",
@@ -1402,6 +1625,128 @@
                         },
                         {
                             "type": "boolean"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "lhs",
+                "rhs"
+            ]
+        },
+        "logical-binary-expression": {
+            "type": "object",
+            "title": "Compound Binary Expression",
+            "description": "Requires a left hand side and a right hand side values to compare",
+            "properties": {
+                "lhs": {
+                    "title": "Right hand side value",
+                    "description": "Pick one of the right hand side values",
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/EqualsExpression",
+                            "title": "Equals Expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ItemInListExpression",
+                            "title": "Item in a list expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ItemNotInListExpression",
+                            "title": "Item not in a list expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ListContainsItemExpression",
+                            "title": "List contains an item"
+                        },
+                        {
+                            "$ref": "#/$defs/ListNotContainsItemExpression",
+                            "title": "List does not contain an item"
+                        },
+                        {
+                            "$ref": "#/$defs/NotEqualsExpression",
+                            "title": "Not Equals Expression"
+                        },
+                        {
+                            "$ref": "#/$defs/GreaterThanExpression",
+                            "title": "Expression object greater than check"
+                        },
+                        {
+                            "$ref": "#/$defs/GreaterThanOrEqualExpression",
+                            "title": "Expression object greater than equal check"
+                        },
+                        {
+                            "$ref": "#/$defs/LessThanOrEqualExpression",
+                            "title": "Expression object less than equal check"
+                        },
+                        {
+                            "$ref": "#/$defs/LessThanExpression",
+                            "title": "Expression object less than check"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "$ref": "#/$defs/AndExpression"
+                        },
+                        {
+                            "$ref": "#/$defs/OrExpression"
+                        }
+                    ]
+                },
+                "rhs": {
+                    "title": "Right hand side value",
+                    "description": "Pick one of the right hand side values",
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/EqualsExpression",
+                            "title": "Equals Expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ItemInListExpression",
+                            "title": "Item in a list expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ItemNotInListExpression",
+                            "title": "Item not in a list expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ListContainsItemExpression",
+                            "title": "List contains an item"
+                        },
+                        {
+                            "$ref": "#/$defs/ListNotContainsItemExpression",
+                            "title": "List does not contain an item"
+                        },
+                        {
+                            "$ref": "#/$defs/NotEqualsExpression",
+                            "title": "Not Equals Expression"
+                        },
+                        {
+                            "$ref": "#/$defs/GreaterThanExpression",
+                            "title": "Expression object greater than check"
+                        },
+                        {
+                            "$ref": "#/$defs/GreaterThanOrEqualExpression",
+                            "title": "Expression object greater than equal check"
+                        },
+                        {
+                            "$ref": "#/$defs/LessThanOrEqualExpression",
+                            "title": "Expression object less than equal check"
+                        },
+                        {
+                            "$ref": "#/$defs/LessThanExpression",
+                            "title": "Expression object less than check"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "$ref": "#/$defs/AndExpression"
+                        },
+                        {
+                            "$ref": "#/$defs/OrExpression"
                         }
                     ]
                 }
