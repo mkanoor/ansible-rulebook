@@ -1637,12 +1637,12 @@
         },
         "logical-binary-expression": {
             "type": "object",
-            "title": "Compound Binary Expression",
-            "description": "Requires a left hand side and a right hand side values to compare",
+            "title": "Compound Logical Expression",
+            "description": "Requires a left hand expression and a right hand expression and one of them has to evaluate to true.",
             "properties": {
                 "lhs": {
-                    "title": "Right hand side value",
-                    "description": "Pick one of the right hand side values",
+                    "title": "Right hand side expression",
+                    "description": "Pick one of the right hand side expresssions",
                     "oneOf": [
                         {
                             "$ref": "#/$defs/EqualsExpression",
@@ -1685,19 +1685,22 @@
                             "title": "Expression object less than check"
                         },
                         {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "title": "Boolean object"
                         },
                         {
-                            "$ref": "#/$defs/AndExpression"
+                            "$ref": "#/$defs/AndExpression",
+                            "title": "And expression"
                         },
                         {
-                            "$ref": "#/$defs/OrExpression"
+                            "$ref": "#/$defs/OrExpression",
+                            "title": "Or expression"
                         }
                     ]
                 },
                 "rhs": {
-                    "title": "Right hand side value",
-                    "description": "Pick one of the right hand side values",
+                    "title": "Right hand side expression",
+                    "description": "Pick one of the right hand side expressions",
                     "oneOf": [
                         {
                             "$ref": "#/$defs/EqualsExpression",
@@ -1743,10 +1746,12 @@
                             "type": "boolean"
                         },
                         {
-                            "$ref": "#/$defs/AndExpression"
+                            "$ref": "#/$defs/AndExpression",
+                            "title": "Logical and expression"
                         },
                         {
-                            "$ref": "#/$defs/OrExpression"
+                            "$ref": "#/$defs/OrExpression",
+                            "title": "Logical or expression"
                         }
                     ]
                 }
