@@ -975,8 +975,47 @@
             "properties": {
                 "Facts": {
                     "type": "string",
-                    "description": "Key name",
-                    "title": "The key name can be delimited with dots or it can be enclosed in square brackets"
+                    "title": "Key name",
+                    "description": "The key name can be delimited with dots or it can be enclosed in square brackets"
+                }
+            },
+            "additionalProperties": false
+        },
+        "IntegerObject": {
+            "type": "object",
+            "title": "Integer object",
+            "description": "This stores the integer object",
+            "properties": {
+                "Integer": {
+                    "type": "number",
+                    "title": "Integer",
+                    "description": "The integer value"
+                }
+            },
+            "additionalProperties": false
+        },
+        "FloatObject": {
+            "type": "object",
+            "title": "Float object",
+            "description": "This stores the real/numeric/float object",
+            "properties": {
+                "Integer": {
+                    "type": "number",
+                    "title": "Float",
+                    "description": "The float value"
+                }
+            },
+            "additionalProperties": false
+        },
+        "StringObject": {
+            "type": "object",
+            "title": "String object",
+            "description": "This stores the string object",
+            "properties": {
+                "String": {
+                    "type": "string",
+                    "title": "String",
+                    "description": "The string value"
                 }
             },
             "additionalProperties": false
@@ -1115,10 +1154,13 @@
                             "$ref": "#/$defs/FactsObject"
                         },
                         {
-                            "type": "string"
+                            "$ref": "#/$defs/StringObject"
                         },
                         {
-                            "type": "number"
+                            "$ref": "#/$defs/IntegerObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FloatObject"
                         },
                         {
                             "type": "boolean"
@@ -1142,10 +1184,13 @@
                             "$ref": "#/$defs/FactsObject"
                         },
                         {
-                            "type": "string"
+                            "$ref": "#/$defs/StringObject"
                         },
                         {
-                            "type": "number"
+                            "$ref": "#/$defs/IntegerObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FloatObject"
                         },
                         {
                             "type": "boolean"
@@ -1181,10 +1226,13 @@
                             "$ref": "#/$defs/FactsObject"
                         },
                         {
-                            "type": "number"
+                            "$ref": "#/$defs/StringObject"
                         },
                         {
-                            "type": "string"
+                            "$ref": "#/$defs/IntegerObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FloatObject"
                         }
                     ]
                 },
@@ -1205,10 +1253,13 @@
                             "$ref": "#/$defs/FactsObject"
                         },
                         {
-                            "type": "string"
+                            "$ref": "#/$defs/StringObject"
                         },
                         {
-                            "type": "number"
+                            "$ref": "#/$defs/IntegerObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FloatObject"
                         }
                     ]
                 }

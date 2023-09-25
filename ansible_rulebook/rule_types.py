@@ -51,6 +51,7 @@ class Action(NamedTuple):
 class Condition(NamedTuple):
     when: str
     value: List[ct.Condition]
+    ast: List[dict] = None
     timeout: Optional[str] = None
 
 

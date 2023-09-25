@@ -194,9 +194,21 @@ def parse_condition(condition: Any) -> rt.Condition:
         keys = list(condition.keys())
         if len(condition) == 1 and keys[0] in ["any", "all", "not_all"]:
             when = keys[0]
+            ast = []
+            value = []
+            import pdb
+
+            pdb.set_trace()
+            for c in condition[when]:
+                if isinstance(c, str):
+                    value.append(condition_value(c))
+                elif isinstance(c, dict):
+                    ast.append(c)
+
             return rt.Condition(
                 when,
-                [parse_condition_value(c) for c in condition[when]],
+                value,
+                ast,
                 timeout,
             )
         else:
@@ -206,3 +218,7 @@ def parse_condition(condition: Any) -> rt.Condition:
 
     else:
         raise Exception(f"Unsupported condition {condition}")
+
+
+def condition_value(c: str) -> rt.Condition:
+    return parse_condition_value(c)

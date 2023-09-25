@@ -273,7 +273,14 @@ def visit_source_filter(parsed_source: EventSourceFilter, variables: Dict):
 
 def generate_condition(ansible_condition: RuleCondition, variables: Dict):
     """Generate the condition AST."""
-    condition = visit_condition(ansible_condition.value, variables)
+    import pdb
+
+    pdb.set_trace()
+    if ansible_condition.value:
+        condition = visit_condition(ansible_condition.value, variables)
+    elif ansible_condition.ast:
+        condition = ansible_condition.ast
+
     if ansible_condition.when == "any":
         data = {"AnyCondition": condition}
     elif ansible_condition.when == "all":
@@ -290,6 +297,9 @@ def generate_condition(ansible_condition: RuleCondition, variables: Dict):
 
 
 def visit_ruleset(ruleset: RuleSet, variables: Dict):
+    import pdb
+
+    pdb.set_trace()
     """Generate JSON compatible rules."""
     data = {
         "name": ruleset.name,

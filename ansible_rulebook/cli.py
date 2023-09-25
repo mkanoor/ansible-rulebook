@@ -259,6 +259,7 @@ def main(args: List[str] = None) -> int:
     except KeyboardInterrupt:
         return 0
     except Exception as err:
+        logger.exception(err)
         logger.error("Terminating %s", str(err))
         return 1
     return 0
