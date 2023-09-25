@@ -196,9 +196,6 @@ def parse_condition(condition: Any) -> rt.Condition:
             when = keys[0]
             ast = []
             value = []
-            import pdb
-
-            pdb.set_trace()
             for c in condition[when]:
                 if isinstance(c, str):
                     value.append(condition_value(c))

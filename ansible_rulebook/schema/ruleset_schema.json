@@ -345,12 +345,32 @@
                     "items": {
                         "oneOf": [
                             {
+                                "$ref": "#/$defs/AssignmentExpression",
+                                "title": "Save the matched event for the expression to be used later"
+                            },
+                            {
                                 "$ref": "#/$defs/inline-string-condition",
                                 "title": "Condition expression written as string"
                             },
                             {
                                 "$ref": "#/$defs/EqualsExpression",
                                 "title": "Equals Expression"
+                            },
+                            {
+                                "$ref": "#/$defs/ItemInListExpression",
+                                "title": "Item in a list expression"
+                            },
+                            {
+                                "$ref": "#/$defs/ItemNotInListExpression",
+                                "title": "Item not in a list expression"
+                            },
+                            {
+                                "$ref": "#/$defs/ListContainsItemExpression",
+                                "title": "List contains an item"
+                            },
+                            {
+                                "$ref": "#/$defs/ListNotContainsItemExpression",
+                                "title": "List does not contain an item"
                             },
                             {
                                 "$ref": "#/$defs/NotEqualsExpression",
@@ -999,7 +1019,7 @@
             "title": "Float object",
             "description": "This stores the real/numeric/float object",
             "properties": {
-                "Integer": {
+                "Float": {
                     "type": "number",
                     "title": "Float",
                     "description": "The float value"
@@ -1033,6 +1053,139 @@
                 "EqualsExpression"
             ],
             "title": "EqualsExpression"
+        },
+        "AssignmentExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Assign the matching event to a temporary variable",
+            "properties": {
+                "AssignmentExpression": {
+                    "$ref": "#/$defs/assignment-expression"
+                }
+            },
+            "required": [
+                "AssignmentExpression"
+            ],
+            "title": "AssignmentExpression"
+        },
+        "ItemInListExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if an item exists in a list",
+            "properties": {
+                "ItemInListExpression": {
+                    "$ref": "#/$defs/list-expression"
+                }
+            },
+            "required": [
+                "ItemInListExpression"
+            ],
+            "title": "ItemInListExpression"
+        },
+        "ItemNotInListExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if an item does not exist in a list",
+            "properties": {
+                "ItemNotInListExpression": {
+                    "$ref": "#/$defs/list-expression"
+                }
+            },
+            "required": [
+                "ItemNotInListExpression"
+            ],
+            "title": "ItemNotInListExpression"
+        },
+        "ListContainsItemExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if a list contains an item",
+            "properties": {
+                "ListContainsItemExpression": {
+                    "$ref": "#/$defs/contain-expression"
+                }
+            },
+            "required": [
+                "ListContainsItemExpression"
+            ],
+            "title": "ListContainsItemExpression"
+        },
+        "ListNotContainsItemExpression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Check if a list does not contain an item",
+            "properties": {
+                "ListNotContainsItemExpression": {
+                    "$ref": "#/$defs/contain-expression"
+                }
+            },
+            "required": [
+                "ListNotContainsItemExpression"
+            ],
+            "title": "ListNotContainsItemExpression"
+        },
+        "assignment-expression": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Save the matching event for an expression",
+            "properties": {
+                "lhs": {
+                    "$ref": "#/$defs/EventsObject"
+                },
+                "rhs": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/inline-string-condition",
+                            "title": "Condition expression written as string"
+                        },
+                        {
+                            "$ref": "#/$defs/EqualsExpression",
+                            "title": "Equals Expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ItemInListExpression",
+                            "title": "Item in a list expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ItemNotInListExpression",
+                            "title": "Item not in a list expression"
+                        },
+                        {
+                            "$ref": "#/$defs/ListContainsItemExpression",
+                            "title": "List contains an item"
+                        },
+                        {
+                            "$ref": "#/$defs/ListNotContainsItemExpression",
+                            "title": "List does not contain an item"
+                        },
+                        {
+                            "$ref": "#/$defs/NotEqualsExpression",
+                            "title": "Not Equals Expression"
+                        },
+                        {
+                            "$ref": "#/$defs/GreaterThanExpression",
+                            "title": "Expression object greater than check"
+                        },
+                        {
+                            "$ref": "#/$defs/GreaterThanOrEqualExpression",
+                            "title": "Expression object greater than equal check"
+                        },
+                        {
+                            "$ref": "#/$defs/LessThanOrEqualExpression",
+                            "title": "Expression object less than equal check"
+                        },
+                        {
+                            "$ref": "#/$defs/LessThanExpression",
+                            "title": "Expression object less than check"
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "lhs",
+                "rhs"
+            ],
+            "title": "AssignmentExpression"
         },
         "AdditionExpression": {
             "type": "object",
@@ -1131,6 +1284,133 @@
                 "GreaterThanOrEqualExpression"
             ],
             "title": "GreaterThanOrEqualExpression"
+        },
+        "list-expression": {
+            "type": "object",
+            "title": "List Expression",
+            "description": "Requires a item and an array of list",
+            "properties": {
+                "lhs": {
+                    "title": "Left hand side",
+                    "description": "Pick one of the left hand side values",
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/EventObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactObject"
+                        },
+                        {
+                            "$ref": "#/$defs/EventsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/StringObject"
+                        },
+                        {
+                            "$ref": "#/$defs/IntegerObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FloatObject"
+                        },
+                        {
+                            "type": "boolean"
+                        }
+                    ]
+                },
+                "rhs": {
+                    "title": "Right hand side value",
+                    "description": "Pick one of the array elements",
+                    "anyOf": [
+                        {
+                            "ref": "#/defs/EventObject"
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "oneOf": [
+                                    {
+                                        "$ref": "#/$defs/IntegerObject"
+                                    },
+                                    {
+                                        "$ref": "#/$defs/FloatObject"
+                                    },
+                                    {
+                                        "$ref": "#/$defs/StringObject"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "lhs",
+                "rhs"
+            ]
+        },
+        "contain-expression": {
+            "type": "object",
+            "title": "List Contains Expression",
+            "description": "Requires an array of items and an item to find",
+            "properties": {
+                "lhs": {
+                    "title": "Light hand side value",
+                    "description": "Pick an Array",
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/$defs/IntegerObject"
+                            },
+                            {
+                                "$ref": "#/$defs/FloatObject"
+                            },
+                            {
+                                "$ref": "#/$defs/StringObject"
+                            }
+                        ]
+                    }
+                },
+                "rhs": {
+                    "title": "Right hand side",
+                    "description": "Pick one of the Right hand side values",
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/EventObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactObject"
+                        },
+                        {
+                            "$ref": "#/$defs/EventsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FactsObject"
+                        },
+                        {
+                            "$ref": "#/$defs/StringObject"
+                        },
+                        {
+                            "$ref": "#/$defs/IntegerObject"
+                        },
+                        {
+                            "$ref": "#/$defs/FloatObject"
+                        },
+                        {
+                            "type": "boolean"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "lhs",
+                "rhs"
+            ]
         },
         "binary-expression": {
             "type": "object",
