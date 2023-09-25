@@ -1788,7 +1788,7 @@
             "properties": {
                 "lhs": {
                     "title": "Right hand side expression",
-                    "description": "Pick one of the right hand side expresssions",
+                    "description": "Pick one of the right hand side expressions",
                     "oneOf": [
                         {
                             "$ref": "#/$defs/EqualsExpression",
