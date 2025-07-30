@@ -16,6 +16,7 @@ import asyncio
 import gc
 import logging
 import uuid
+from collections import defaultdict
 from pprint import pformat
 from types import MappingProxyType
 from typing import Dict, List, Optional, Union, cast
@@ -108,6 +109,7 @@ class RuleSetRunner:
         self.broadcast_method = broadcast_method
         self.event_counter = 0
         self.display = terminal.Display()
+        self.locks = defaultdict(asyncio.Lock)
 
     async def run_ruleset(self):
         tasks = []
@@ -284,6 +286,29 @@ class RuleSetRunner:
             if not self.action_loop_task.done():
                 self.action_loop_task.cancel()
 
+    async def _run_action_with_lock(
+        self,
+        lock_name: str,
+        action: str,
+        metadata: Metadata,
+        control: Control,
+        action_args: dict,
+    ):
+        """
+        Acquire the lock for the specified resource, access the resource,
+        and release the lock.
+        """
+        async with self.locks[
+            lock_name
+        ]:  # Acquire lock for the specific resource
+            print(f"Acquired lock for resource: {lock_name}")
+            await ACTION_CLASSES[action](
+                metadata,
+                control,
+                **action_args,
+            )()
+            print(f"Released lock for resource: {lock_name}")
+
     async def _drain_actionplan_queue(self):
         logger.info("Waiting for actions on events from %s", self.name)
         try:
@@ -316,6 +341,7 @@ class RuleSetRunner:
                     == ExecutionStrategy.SEQUENTIAL
                 ):
                     await task
+
         except asyncio.CancelledError:
             logger.debug(
                 "Action Plan Task Cancelled for ruleset %s", self.name
@@ -451,11 +477,25 @@ class RuleSetRunner:
                     project_data_file=self.project_data_file,
                 )
 
-                await ACTION_CLASSES[action](
-                    metadata,
-                    control,
-                    **action_args,
-                )()
+                lock = action_args.get("lock", None)
+                if (
+                    self.rule_set.execution_strategy
+                    == ExecutionStrategy.PARALLEL
+                    and lock
+                ):
+                    await self._run_action_with_lock(
+                        lock,
+                        action,
+                        metadata,
+                        control,
+                        action_args,
+                    )
+                else:
+                    await ACTION_CLASSES[action](
+                        metadata,
+                        control,
+                        **action_args,
+                    )()
 
             except KeyError as e:
                 logger.error(

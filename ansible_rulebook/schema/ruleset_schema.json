@@ -457,6 +457,9 @@
                         "include_events": {
                             "type": "boolean",
                             "default": true
+                        },
+                        "lock": {
+                            "type": "string"
                         }
                     },
                     "required": [
@@ -510,6 +513,9 @@
                         "include_events": {
                             "type": "boolean",
                             "default": true
+                        },
+                        "lock": {
+                            "type": "string"
                         }
                     },
                     "required": [
