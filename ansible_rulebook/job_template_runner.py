@@ -18,7 +18,7 @@ import logging
 import os
 import ssl
 from functools import cached_property
-from typing import Union
+from typing import Optional, Union
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
@@ -37,9 +37,14 @@ logger = logging.getLogger(__name__)
 class JobTemplateRunner:
     LEGACY_UNIFIED_TEMPLATE_SLUG = "api/v2/unified_job_templates/"
     LEGACY_CONFIG_SLUG = "api/v2/config/"
+    LEGACY_LABELS_SLUG = "api/v2/labels/"
+    LEGACY_ORGANIZATION_SLUG = "api/v2/organizations/"
     GATEWAY_UNIFIED_TEMPLATE_SLUG = "v2/unified_job_templates/"
     GATEWAY_CONFIG_SLUG = "v2/config/"
+    GATEWAY_LABELS_SLUG = "v2/labels/"
+    GATEWAY_ORGANIZATION_SLUG = "v2/organizations/"
     JOB_COMPLETION_STATUSES = ["successful", "failed", "error", "canceled"]
+    EDA_JOB_LABEL = "Activated by Event-Driven Ansible"
 
     def __init__(
         self,
@@ -61,6 +66,8 @@ class JobTemplateRunner:
         self._session = None
         self._config_slug = self.LEGACY_CONFIG_SLUG
         self._unified_job_template_slug = self.LEGACY_UNIFIED_TEMPLATE_SLUG
+        self._labels_slug = self.LEGACY_LABELS_SLUG
+        self._organization_slug = self.LEGACY_ORGANIZATION_SLUG
 
     @property
     def host(self):
@@ -89,6 +96,8 @@ class JobTemplateRunner:
         urlparts = urlparse(url)
         if urlparts.path and urlparts.path != "/":
             self._config_slug = self.GATEWAY_CONFIG_SLUG
+            self._labels_slug = self.GATEWAY_LABELS_SLUG
+            self._organization_slug = self.GATEWAY_ORGANIZATION_SLUG
             self._unified_job_template_slug = (
                 self.GATEWAY_UNIFIED_TEMPLATE_SLUG
             )
@@ -156,6 +165,7 @@ class JobTemplateRunner:
                     return {
                         "launch": dpath.get(jt, "related.launch", ".", None),
                         "ask_limit_on_launch": jt["ask_limit_on_launch"],
+                        "ask_labels_on_launch": jt["ask_labels_on_launch"],
                         "ask_inventory_on_launch": jt[
                             "ask_inventory_on_launch"
                         ],
@@ -174,6 +184,7 @@ class JobTemplateRunner:
         name: str,
         organization: str,
         job_params: dict,
+        labels: Optional[list[str]] = None,
     ) -> dict:
         obj = await self._get_template_obj(name, organization, "job_template")
         if not obj:
@@ -183,6 +194,19 @@ class JobTemplateRunner:
                     f"{organization} does not exist"
                 )
             )
+        if obj["ask_labels_on_launch"]:
+            job_labels = await self._get_labels_by_name(organization, labels)
+            job_params["labels"] = job_labels
+        else:
+            if labels:
+                logger.warning(
+                    (
+                        "Job template %s does not accept labels, please "
+                        "enable Prompt on launch for Labels"
+                    ),
+                    name,
+                )
+
         url = urljoin(self.host, obj["launch"])
         job = await self._launch(job_params, url)
         return await self._monitor_job(job["url"])
@@ -192,6 +216,7 @@ class JobTemplateRunner:
         name: str,
         organization: str,
         job_params: dict,
+        labels: Optional[list[str]] = None,
     ) -> dict:
         obj = await self._get_template_obj(
             name, organization, "workflow_job_template"
@@ -203,6 +228,20 @@ class JobTemplateRunner:
                     f"{organization} does not exist"
                 )
             )
+
+        if obj["ask_labels_on_launch"]:
+            job_labels = await self._get_labels_by_name(organization, labels)
+            job_params["labels"] = job_labels
+        else:
+            if labels:
+                logger.warning(
+                    (
+                        "Job template %s does not accept labels, please "
+                        "enable Prompt on launch for Labels"
+                    ),
+                    name,
+                )
+
         url = urljoin(self.host, obj["launch"])
         if not obj["ask_limit_on_launch"] and "limit" in job_params:
             logger.warning(
@@ -238,6 +277,66 @@ class JobTemplateRunner:
             if body:
                 logger.error("Error: %s", body)
             raise ControllerApiException(str(e))
+
+    async def _get_obj_by_name(
+        self, href_slug: str, name: str
+    ) -> Optional[dict]:
+        params = {"name": name}
+        result = await self._get_page(href_slug, params)
+        if result["count"] == 0:
+            return None
+        elif result["count"] == 1:
+            return result["results"][0]
+
+    async def _create_obj(self, href_slug: str, params: dict) -> dict:
+        try:
+            url = urljoin(self.host, href_slug)
+            self._create_session()
+            async with self._session.post(
+                url,
+                json=params,
+                ssl=self._sslcontext,
+            ) as post_response:
+                body = json.loads(await post_response.text())
+                post_response.raise_for_status()
+                return body
+        except aiohttp.ClientError as e:
+            logger.error("Error connecting to controller: %s", str(e))
+            raise ControllerApiException(str(e))
+
+    async def _get_or_create_label(
+        self, label: str, organization_obj: dict
+    ) -> dict:
+        obj = await self._get_obj_by_name(self._labels_slug, label)
+        if obj:
+            return obj
+
+        params = {"name": label, "organization": organization_obj["id"]}
+        return await self._create_obj(self._labels_slug, params)
+
+    async def _get_labels_by_name(
+        self, organization: str, labels: Optional[list[str]]
+    ) -> list[int]:
+        result = []
+        organization_obj = await self._get_obj_by_name(
+            self._organization_slug, organization
+        )
+
+        label_obj = await self._get_or_create_label(
+            self.EDA_JOB_LABEL, organization_obj
+        )
+        result.append(label_obj["id"])
+
+        if not labels:
+            return result
+
+        for label in labels:
+            label_obj = await self._get_or_create_label(
+                label, organization_obj
+            )
+            result.append(label_obj["id"])
+
+        return result
 
 
 job_template_runner = JobTemplateRunner()

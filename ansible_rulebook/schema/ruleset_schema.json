@@ -457,6 +457,12 @@
                         "include_events": {
                             "type": "boolean",
                             "default": true
+                        },
+                        "labels": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
                         }
                     },
                     "required": [
@@ -510,6 +516,12 @@
                         "include_events": {
                             "type": "boolean",
                             "default": true
+                        },
+                        "labels": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
                         }
                     },
                     "required": [
