@@ -38,6 +38,7 @@ from ansible_rulebook import terminal
 from ansible_rulebook.conf import settings
 from ansible_rulebook.exception import (
     InvalidFilterNameException,
+    InvalidSourceNameException,
     InventoryNotFound,
     VaultDecryptException,
 )
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 EDA_BUILTIN_FILTER_PREFIX = "eda.builtin."
+EDA_BUILTIN_SOURCE_PREFIX = "eda.builtin."
 
 
 def decrypted_context(
@@ -305,8 +307,19 @@ def has_builtin_filter(name: str) -> bool:
     return _builtin_filter_path(name)[0]
 
 
+def has_builtin_source(name: str) -> bool:
+    return _builtin_source_path(name)[0]
+
+
 def find_builtin_filter(name: str) -> Optional[str]:
     found, path = _builtin_filter_path(name)
+    if found:
+        return path
+    return None
+
+
+def find_builtin_source(name: str) -> Optional[str]:
+    found, path = _builtin_source_path(name)
     if found:
         return path
     return None
@@ -347,15 +360,25 @@ def create_inventory(runner_inventory_dir: str, inventory: str) -> str:
 
 
 def _builtin_filter_path(name: str) -> Tuple[bool, str]:
-    if not name.startswith(EDA_BUILTIN_FILTER_PREFIX):
-        return False, ""
-    filter_name = name.split(".")[-1]
+    return _builtin_eda_path(name, "event_filter", EDA_BUILTIN_FILTER_PREFIX)
 
-    if not filter_name:
-        raise InvalidFilterNameException(name)
+
+def _builtin_source_path(name: str) -> Tuple[bool, str]:
+    return _builtin_eda_path(name, "event_source", EDA_BUILTIN_SOURCE_PREFIX)
+
+
+def _builtin_eda_path(name: str, ftype: str, prefix: str) -> Tuple[bool, str]:
+    if not name.startswith(prefix):
+        return False, ""
+    builtin_name = name.split(".")[-1]
+
+    if not builtin_name:
+        if ftype == "event_filter":
+            raise InvalidFilterNameException(name)
+        raise InvalidSourceNameException(name)
 
     dirname = os.path.dirname(os.path.realpath(__file__))
-    path = os.path.join(dirname, "event_filter", filter_name + ".py")
+    path = os.path.join(dirname, ftype, builtin_name + ".py")
     return os.path.exists(path), path
 
 

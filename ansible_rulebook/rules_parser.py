@@ -95,6 +95,7 @@ def parse_event_sources(sources: Dict) -> List[rt.EventSource]:
     source_list = []
     for source in sources:
         name = source.pop("name", "")
+        feedback = source.pop("feedback", False)
         source_filters = []
         for source_filter in source.pop("filters", []):
             source_filters.append(parse_source_filter(source_filter))
@@ -109,6 +110,7 @@ def parse_event_sources(sources: Dict) -> List[rt.EventSource]:
                 source_name=source_name,
                 source_args=source_args,
                 source_filters=source_filters,
+                feedback=feedback,
             )
         )
 

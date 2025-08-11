@@ -43,7 +43,9 @@ from ansible_rulebook.rule_types import (
 from ansible_rulebook.util import (
     collect_ansible_facts,
     find_builtin_filter,
+    find_builtin_source,
     has_builtin_filter,
+    has_builtin_source,
     send_session_stats,
     substitute_variables,
 )
@@ -116,6 +118,7 @@ async def start_source(
     queue: asyncio.Queue,
     shutdown_delay: float = 60.0,
     filter_dirs: Optional[list[str]] = None,
+    feedback_queue: asyncio.Queue = None,
 ) -> None:
     all_source_queues.append(queue)
     try:
@@ -130,6 +133,8 @@ async def start_source(
             module = runpy.run_path(
                 os.path.join(source_dirs[0], source.source_name + ".py")
             )
+        elif has_builtin_source(source.source_name):
+            module = runpy.run_path(find_builtin_source(source.source_name))
         elif has_source(*split_collection_name(source.source_name)):
             module = runpy.run_path(
                 find_source(*split_collection_name(source.source_name))
@@ -205,7 +210,10 @@ async def start_source(
                 source_name=source.source_name
             )
 
-        await entrypoint(fqueue, args)
+        if source.feedback:
+            await entrypoint(fqueue, feedback_queue, args)
+        else:
+            await entrypoint(fqueue, args)
         shutdown_msg = (
             f"Source {source.source_name} initiated shutdown at "
             f"{str(datetime.now())}"
@@ -312,7 +320,8 @@ async def run_rulesets(
     hosts_facts = []
     ruleset_names = []
     rulesets = {}
-    for ruleset, _ in ruleset_queues:
+    feedback_queue_dict = {}
+    for ruleset, _, feedback_queue in ruleset_queues:
         if ruleset.gather_facts and not hosts_facts:
             if inventory:
                 hosts_facts = collect_ansible_facts(inventory)
@@ -323,6 +332,8 @@ async def run_rulesets(
 
         ruleset_names.append(ruleset.name)
         rulesets[ruleset.name] = ruleset
+        if feedback_queue:
+            feedback_queue_dict[ruleset.name] = feedback_queue
 
     ruleset_tasks = []
     reader, writer = await establish_async_channel()
@@ -347,6 +358,9 @@ async def run_rulesets(
             project_data_file=project_data_file,
             parsed_args=parsed_args,
             broadcast_method=broadcast,
+            feedback_queue=feedback_queue_dict.get(
+                ruleset_queue_plan.ruleset.name, None
+            ),
         )
         task_name = f"main_ruleset :: {ruleset_queue_plan.ruleset.name}"
         ruleset_task = asyncio.create_task(

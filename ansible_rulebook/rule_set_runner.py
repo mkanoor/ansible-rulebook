@@ -93,6 +93,7 @@ class RuleSetRunner:
         project_data_file: Optional[str] = None,
         parsed_args=None,
         broadcast_method=None,
+        feedback_queue=None,
     ):
         self.action_loop_task = None
         self.event_log = event_log
@@ -108,6 +109,7 @@ class RuleSetRunner:
         self.broadcast_method = broadcast_method
         self.event_counter = 0
         self.display = terminal.Display()
+        self.feedback_queue = feedback_queue
 
     async def run_ruleset(self):
         tasks = []
@@ -246,6 +248,8 @@ class RuleSetRunner:
                         str(data),
                     )
                     lang.post(self.name, data)
+                    if self.feedback_queue:
+                        await self.feedback_queue.put(data)
                 except MessageObservedException:
                     logger.debug("MessageObservedException: %s", data)
                 except MessageNotHandledException:

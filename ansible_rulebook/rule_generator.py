@@ -94,7 +94,7 @@ def generate_rulesets(
 
     rulesets = []
 
-    for ansible_ruleset, source_queue in ruleset_queues:
+    for ansible_ruleset, source_queue, _ in ruleset_queues:
         ruleset_ast = visit_ruleset(ansible_ruleset, variables)
         drools_ruleset = DroolsRuleset(
             name=ansible_ruleset.name,

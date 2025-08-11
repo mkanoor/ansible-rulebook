@@ -40,6 +40,7 @@ class EventSource(NamedTuple):
     source_name: str
     source_args: dict
     source_filters: List[EventSourceFilter]
+    feedback: bool
 
 
 class Action(NamedTuple):
@@ -98,6 +99,7 @@ class ActionContext(NamedTuple):
 class RuleSetQueue(NamedTuple):
     ruleset: RuleSet
     source_queue: asyncio.Queue
+    feedback_queue: Optional[asyncio.Queue]
 
 
 @dataclass
