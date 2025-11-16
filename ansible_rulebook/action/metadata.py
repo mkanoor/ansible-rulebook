@@ -13,6 +13,7 @@
 #  limitations under the License.
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,12 @@ class Metadata:
         Rule set uuid
     rule_run_at: str
         ISO 8601 date/time when the rule was triggered
+    matching_uuid: str
+        The matching UUID used when in HA mode
+    action_index: int
+        The action index
+    last_action: bool
+        If this is a last action for the rule
     """
 
     __slots__ = [
@@ -40,9 +47,15 @@ class Metadata:
         "rule_set",
         "rule_set_uuid",
         "rule_run_at",
+        "matching_uuid",
+        "action_index",
+        "last_action",
     ]
     rule: str
     rule_uuid: str
     rule_set: str
     rule_set_uuid: str
     rule_run_at: str
+    matching_uuid: Optional[str]
+    action_index: int
+    last_action: bool

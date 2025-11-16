@@ -13,6 +13,7 @@
 #  limitations under the License.
 
 import asyncio
+import json
 import logging
 import uuid
 from urllib.parse import urljoin
@@ -85,6 +86,7 @@ class RunJobTemplate:
             retries = max(self.action_args.get("retries", 0), 1)
         delay = self.action_args.get("delay", 0)
 
+        job_url = None
         try:
             for i in range(retries + 1):
                 if i > 0:
@@ -95,12 +97,25 @@ class RunJobTemplate:
                         i,
                         retries,
                     )
-                controller_job = await job_template_runner.run_job_template(
+                # Launch the job and get URL immediately
+                job_url = await job_template_runner.launch_job_template(
                     self.name,
                     self.organization,
                     self.job_args,
                     self.action_args.get("labels"),
                 )
+                logger.info(f"Job launched, URL: {job_url}")
+                action_data = json.dumps({"job_url": job_url})
+                lang.update_action_info(
+                    self.helper.metadata.rule_set,
+                    self.helper.metadata.matching_uuid,
+                    self.helper.metadata.action_index,
+                    action_data,
+                )
+
+                # Monitor the job until completion
+                controller_job = await job_template_runner.monitor_job(job_url)
+
                 if controller_job["status"] != "failed":
                     break
         except (ControllerApiException, JobTemplateNotFoundException) as ex:

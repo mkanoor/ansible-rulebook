@@ -184,13 +184,18 @@ class JobTemplateRunner:
             else:
                 break
 
-    async def run_job_template(
+    async def launch_job_template(
         self,
         name: str,
         organization: str,
         job_params: dict,
         labels: Optional[list[str]] = None,
-    ) -> dict:
+    ) -> str:
+        """Launch a job template and return the job URL immediately.
+
+        Returns:
+            str: The job URL for monitoring
+        """
         obj = await self._get_template_obj(name, organization, "job_template")
         if not obj:
             raise JobTemplateNotFoundException(
@@ -213,15 +218,32 @@ class JobTemplateRunner:
 
         url = urljoin(self.host, obj["launch"])
         job = await self._launch(job_params, url)
-        return await self._monitor_job(job["url"])
+        return job["url"]
 
-    async def run_workflow_job_template(
+    async def run_job_template(
         self,
         name: str,
         organization: str,
         job_params: dict,
         labels: Optional[list[str]] = None,
     ) -> dict:
+        job_url = await self.launch_job_template(
+            name, organization, job_params, labels
+        )
+        return await self.monitor_job(job_url)
+
+    async def launch_workflow_job_template(
+        self,
+        name: str,
+        organization: str,
+        job_params: dict,
+        labels: Optional[list[str]] = None,
+    ) -> str:
+        """Launch a workflow job template and return the job URL immediately.
+
+        Returns:
+            str: The job URL for monitoring
+        """
         obj = await self._get_template_obj(
             name, organization, "workflow_job_template"
         )
@@ -251,9 +273,29 @@ class JobTemplateRunner:
             )
             job_params.pop("limit")
         job = await self._launch(job_params, url)
-        return await self._monitor_job(job["url"])
+        return job["url"]
 
-    async def _monitor_job(self, url) -> dict:
+    async def run_workflow_job_template(
+        self,
+        name: str,
+        organization: str,
+        job_params: dict,
+        labels: Optional[list[str]] = None,
+    ) -> dict:
+        job_url = await self.launch_workflow_job_template(
+            name, organization, job_params, labels
+        )
+        return await self.monitor_job(job_url)
+
+    async def monitor_job(self, url) -> dict:
+        """Monitor a job until completion.
+
+        Args:
+            url: The job URL to monitor
+
+        Returns:
+            dict: The final job status when complete
+        """
         while True:
             # fetch and process job status
             json_body = await self._get_page(url, {})

@@ -1,0 +1,52 @@
+---
+# Example rulebook demonstrating HA (High Availability) mode
+#
+# This rulebook uses the example_ha_source plugin which only generates
+# events when the worker is the leader.
+#
+# To test HA mode, run two instances of this rulebook in separate terminals:
+#
+# Terminal 1:
+#   ansible-rulebook -r example_ha_rulebook.yml -i /dev/null \
+#     --ha-postgres-dsn "postgresql://eda_user:eda_password@localhost:5432/eda_ha_db" \
+#     --ha-uuid "550e8400-e29b-41d4-a716-446655440000" \
+#     --ha-poll-interval 3.0 \
+#     --ha-worker-id worker-1 \
+#     -S tests/sources -v
+#
+# Terminal 2:
+#   ansible-rulebook -r example_ha_rulebook.yml -i /dev/null \
+#     --ha-postgres-dsn "postgresql://eda_user:eda_password@localhost:5432/eda_ha_db" \
+#     --ha-uuid "550e8400-e29b-41d4-a716-446655440000" \
+#     --ha-poll-interval 3.0 \
+#     --ha-worker-id worker-2 \
+#     -S tests/sources -v
+#
+# You should see:
+# - Only ONE worker generating events (the leader)
+# - If you kill the leader, the other worker takes over within ~3-5 seconds
+# - The follower remains dormant until it becomes the leader
+
+- name: Example HA Rulebook
+  hosts: localhost
+  sources:
+    - example_ha_source:
+        interval: 5
+        index: "{{ index }}"
+
+  rules:
+    - name: Print all events
+      condition: 
+        all:
+          - event.i == 5
+          - event.i == 1 
+      action:
+        debug:
+          msg: "Received both events"
+    - name: Print single event
+      condition: event.i == 2
+      actions:
+        - debug:
+            msg: "Received first event"
+        - debug:
+            msg: "Received second event"

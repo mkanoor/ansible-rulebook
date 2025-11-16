@@ -22,6 +22,7 @@ from asyncio.exceptions import CancelledError
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
+from drools.ruleset import enable_leader
 
 from ansible_rulebook import rules_parser as rules_parser
 from ansible_rulebook.collection import (
@@ -33,6 +34,7 @@ from ansible_rulebook.common import StartupArgs
 from ansible_rulebook.conf import settings
 from ansible_rulebook.engine import run_rulesets, start_source
 from ansible_rulebook.job_template_runner import job_template_runner
+from ansible_rulebook.leader_election import LeaderElection
 from ansible_rulebook.rule_types import RuleSet, RuleSetQueue
 from ansible_rulebook.util import (
     decryptable,
@@ -133,6 +135,35 @@ async def run(parsed_args: argparse.Namespace) -> None:
     else:
         event_log = NullQueue()
 
+    # Initialize leader election if HA mode is enabled
+    election = None
+    leader_event = None
+    follower_event = None
+    shutdown_event = None
+
+    if parsed_args.ha_postgres_dsn:
+        logger.info("HA mode enabled - initializing leader election")
+        worker_id = (
+            parsed_args.ha_worker_id
+            or f"worker-{parsed_args.id or 'standalone'}"
+        )
+        election = LeaderElection(
+            dsn=parsed_args.ha_postgres_dsn,
+            ha_uuid=parsed_args.ha_uuid,
+            poll_interval=parsed_args.ha_poll_interval,
+            worker_id=worker_id,
+        )
+        leader_event = election.leader_event
+        follower_event = election.follower_event
+        shutdown_event = election.shutdown_event
+        logger.info(
+            "Leader election configured: worker_id=%s, ha_uuid=%s, "
+            "poll_interval=%.1fs",
+            worker_id,
+            parsed_args.ha_uuid,
+            parsed_args.ha_poll_interval,
+        )
+
     logger.info("Starting sources")
     tasks, ruleset_queues = spawn_sources(
         startup_args.rulesets,
@@ -140,6 +171,9 @@ async def run(parsed_args: argparse.Namespace) -> None:
         [parsed_args.source_dir],
         parsed_args.shutdown_delay,
         [parsed_args.filter_dir],
+        leader_event,
+        follower_event,
+        shutdown_event,
     )
 
     logger.info("Starting rules")
@@ -151,15 +185,57 @@ async def run(parsed_args: argparse.Namespace) -> None:
         )
         tasks.append(feedback_task)
 
-    should_reload = await run_rulesets(
-        event_log,
-        ruleset_queues,
-        startup_args.variables,
-        startup_args.inventory,
-        parsed_args,
-        startup_args.project_data_file,
-        file_monitor,
-    )
+    # Start leader election task if HA mode is enabled
+    election_task = None
+    if election:
+        # Define callbacks for leader state changes
+        async def on_became_leader():
+            """Called when this worker becomes the leader."""
+            logger.info(
+                "Worker became leader - enabling leader mode in drools"
+            )
+            try:
+                enable_leader(worker_id)
+                logger.info(
+                    "Drools leader mode enabled for worker: %s", worker_id
+                )
+            except Exception as e:
+                logger.error("Failed to enable drools leader mode: %s", str(e))
+
+        async def on_lost_leadership():
+            """Called when this worker loses leadership."""
+            logger.info(
+                "Worker lost leadership - drools will handle transition"
+            )
+
+        async with election:
+            election_task = asyncio.create_task(
+                election.start(
+                    on_became_leader=on_became_leader,
+                    on_lost_leadership=on_lost_leadership,
+                )
+            )
+            tasks.append(election_task)
+
+            should_reload = await run_rulesets(
+                event_log,
+                ruleset_queues,
+                startup_args.variables,
+                startup_args.inventory,
+                parsed_args,
+                startup_args.project_data_file,
+                file_monitor,
+            )
+    else:
+        should_reload = await run_rulesets(
+            event_log,
+            ruleset_queues,
+            startup_args.variables,
+            startup_args.inventory,
+            parsed_args,
+            startup_args.project_data_file,
+            file_monitor,
+        )
 
     await event_log.put(dict(type="Exit"))
     if feedback_task:
@@ -254,6 +330,9 @@ def spawn_sources(
     source_dirs: List[str],
     shutdown_delay: float,
     filter_dirs: List[str],
+    leader_event: Optional[asyncio.Event] = None,
+    follower_event: Optional[asyncio.Event] = None,
+    shutdown_event: Optional[asyncio.Event] = None,
 ) -> Tuple[List[asyncio.Task], List[RuleSetQueue]]:
     tasks = []
     ruleset_queues = []
@@ -268,6 +347,9 @@ def spawn_sources(
                     source_queue,
                     shutdown_delay,
                     filter_dirs,
+                    leader_event,
+                    follower_event,
+                    shutdown_event,
                 )
             )
             tasks.append(task)

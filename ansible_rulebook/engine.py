@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from drools.dispatch import establish_async_channel, handle_async_messages
-from drools.ruleset import session_stats
+from drools.ruleset import initialize_ha, session_stats
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -116,6 +116,9 @@ async def start_source(
     queue: asyncio.Queue,
     shutdown_delay: float = 60.0,
     filter_dirs: Optional[list[str]] = None,
+    leader_event: Optional[asyncio.Event] = None,
+    follower_event: Optional[asyncio.Event] = None,
+    shutdown_event: Optional[asyncio.Event] = None,
 ) -> None:
     all_source_queues.append(queue)
     try:
@@ -189,6 +192,15 @@ async def start_source(
             k: substitute_variables(v, variables)
             for k, v in source.source_args.items()
         }
+
+        # Add HA events to args if provided
+        if leader_event is not None:
+            args["leader_event"] = leader_event
+        if follower_event is not None:
+            args["follower_event"] = follower_event
+        if shutdown_event is not None:
+            args["shutdown_event"] = shutdown_event
+
         fqueue = FilteredQueue(source_filters, queue)
         logger.debug("Calling main in %s", source.source_name)
 
@@ -299,6 +311,48 @@ async def run_rulesets(
     file_monitor: str = None,
 ) -> bool:
     logger.debug("run_ruleset")
+
+    # Initialize HA mode in drools BEFORE creating any rulesets
+    if parsed_args and parsed_args.ha_postgres_dsn:
+        worker_id = (
+            parsed_args.ha_worker_id
+            or f"worker-{parsed_args.id or 'standalone'}"
+        )
+
+        # Parse PostgreSQL DSN into components
+        # Format: postgresql://user:password@host:port/database
+        import urllib.parse
+
+        parsed_dsn = urllib.parse.urlparse(parsed_args.ha_postgres_dsn)
+
+        postgres_params = {
+            "host": parsed_dsn.hostname or "localhost",
+            "port": parsed_dsn.port or 5432,
+            "database": parsed_dsn.path.lstrip("/") if parsed_dsn.path else "",
+            "user": parsed_dsn.username or "",
+            "password": parsed_dsn.password or "",
+        }
+
+        config = {
+            "ha_uuid": parsed_args.ha_uuid,
+            "poll_interval": parsed_args.ha_poll_interval,
+        }
+
+        logger.info(
+            "Initializing drools HA mode: worker_id=%s, host=%s, "
+            "database=%s, ha_uuid=%s",
+            worker_id,
+            postgres_params["host"],
+            postgres_params["database"],
+            parsed_args.ha_uuid,
+        )
+
+        initialize_ha(
+            uuid=parsed_args.ha_uuid,
+            postgres_params=postgres_params,
+            config=config,
+        )
+
     rulesets_queue_plans = rule_generator.generate_rulesets(
         ruleset_queues, variables, inventory
     )

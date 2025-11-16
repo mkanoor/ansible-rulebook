@@ -259,6 +259,35 @@ def get_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--ha-postgres-dsn",
+        help="PostgreSQL DSN for leader election in HA mode, "
+        "e.g. postgresql://user:pass@host:5432/dbname. "
+        "Can also be passed via env var EDA_HA_POSTGRES_DSN",
+        default=os.environ.get("EDA_HA_POSTGRES_DSN", ""),
+    )
+    parser.add_argument(
+        "--ha-uuid",
+        help="UUID for HA coordination and state persistence. "
+        "All workers in the same HA cluster must use the same UUID. "
+        "Can also be passed via env var EDA_HA_UUID",
+        type=str,
+        default=os.environ.get("EDA_HA_UUID", ""),
+    )
+    parser.add_argument(
+        "--ha-poll-interval",
+        help="Interval in seconds to poll for leadership. "
+        "Default: 5.0. Can also be passed via env var EDA_HA_POLL_INTERVAL",
+        type=float,
+        default=float(os.environ.get("EDA_HA_POLL_INTERVAL", "5.0")),
+    )
+    parser.add_argument(
+        "--ha-worker-id",
+        help="Unique identifier for this worker in HA mode. "
+        "Used for logging and debugging. "
+        "Can also be passed via env var EDA_HA_WORKER_ID",
+        default=os.environ.get("EDA_HA_WORKER_ID", ""),
+    )
     return parser
 
 

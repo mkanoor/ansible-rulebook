@@ -361,11 +361,23 @@ class RuleSetRunner:
     async def _run_multiple_actions(
         self, action_item: ActionContext, rule_run_at: str
     ) -> None:
-        for action in action_item.actions:
-            await self._run_action(action, action_item, rule_run_at)
+        number_of_actions = len(action_item.actions)
+        for index, action in enumerate(action_item.actions):
+            await self._run_action(
+                action,
+                action_item,
+                rule_run_at,
+                index,
+                index == (number_of_actions - 1),
+            )
 
     def _run_action(
-        self, action: Action, action_item: ActionContext, rule_run_at: str
+        self,
+        action: Action,
+        action_item: ActionContext,
+        rule_run_at: str,
+        index: int = 0,
+        last_action: bool = True,
     ) -> asyncio.Task:
         task_name = (
             f"action::{action.action}::"
@@ -379,6 +391,9 @@ class RuleSetRunner:
             rule=action_item.rule,
             rule_uuid=action_item.rule_uuid,
             rule_run_at=rule_run_at,
+            matching_uuid=action_item.rule_engine_results.matching_uuid,
+            action_index=index,
+            last_action=last_action,
         )
 
         task = asyncio.create_task(
@@ -409,6 +424,20 @@ class RuleSetRunner:
     ) -> None:
         logger.debug("call_action %s", action)
         action_args = immutable_action_args.copy()
+        print(f"Please remove this {rules_engine_result}")
+
+        if rules_engine_result.matching_uuid:
+            if not lang.action_info_exists(
+                metadata.rule_set,
+                rules_engine_result.matching_uuid,
+                metadata.action_index,
+            ):
+                lang.add_action_info(
+                    metadata.rule_set,
+                    rules_engine_result.matching_uuid,
+                    metadata.action_index,
+                    "",
+                )
 
         error = None
         if action in ACTION_CLASSES:
@@ -544,6 +573,11 @@ class RuleSetRunner:
             except BaseException as e:
                 logger.error(e)
                 raise
+            finally:
+                if metadata.matching_uuid and metadata.last_action:
+                    lang.delete_action_info(
+                        metadata.rule_set, metadata.matching_uuid
+                    )
         else:
             logger.error("Action %s not supported", action)
             error = UnsupportedActionException(
