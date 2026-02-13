@@ -259,7 +259,12 @@ def spawn_sources(
     ruleset_queues = []
     for ruleset in rulesets:
         source_queue = asyncio.Queue(1)
+        source_feedback_queue = None
         for source in ruleset.sources:
+            if source.source_args and source.source_args.get(
+                "feedback", False
+            ):
+                source_feedback_queue = asyncio.Queue(1)
             task = asyncio.create_task(
                 start_source(
                     source,
@@ -268,10 +273,13 @@ def spawn_sources(
                     source_queue,
                     shutdown_delay,
                     filter_dirs,
+                    source_feedback_queue,
                 )
             )
             tasks.append(task)
-        ruleset_queues.append(RuleSetQueue(ruleset, source_queue))
+        ruleset_queues.append(
+            RuleSetQueue(ruleset, source_queue, source_feedback_queue)
+        )
     return tasks, ruleset_queues
 
 

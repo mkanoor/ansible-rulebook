@@ -157,22 +157,43 @@ async def msg_handler(
     websocket: ws_server.ServerConnection,
     queue: asyncio.Queue,
     failed: bool = False,
+    ignore_connection_closed: bool = False,
 ):
     """
     Handler for a websocket server that passes json messages
     from ansible-rulebook in the given queue
+
+    Args:
+        websocket: The websocket connection
+        queue: Queue to store received messages
+        failed: If True, forces a coding error for testing
+        ignore_connection_closed: If True, silently handles
+                                  abrupt connection closes
+                                  (useful for restart scenarios)
     """
+    import websockets.exceptions
+
     i = 0
-    async for message in websocket:
-        payload = json.loads(message)
-        data = {"path": websocket.request.path, "payload": payload}
-        await queue.put(data)
-        if i == 1:
-            if failed:
-                print(data["bad"])  # force a coding error
-            else:
-                await websocket.close()  # should be auto reconnected
-        i += 1
+    try:
+        async for message in websocket:
+            payload = json.loads(message)
+            data = {"path": websocket.request.path, "payload": payload}
+            await queue.put(data)
+            if i == 1:
+                if failed:
+                    print(data["bad"])  # force a coding error
+                else:
+                    await websocket.close()  # should be auto reconnected
+            i += 1
+    except websockets.exceptions.ConnectionClosedError:
+        if ignore_connection_closed:
+            # Connection closed abruptly (e.g., client process
+            # killed during restart)
+            # This is expected, so we handle it gracefully
+            pass
+        else:
+            # Unexpected connection close - re-raise to surface the error
+            raise
 
 
 def get_safe_port() -> int:

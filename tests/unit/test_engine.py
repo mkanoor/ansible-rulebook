@@ -656,7 +656,9 @@ class TestRunRulesets:
         )
 
         source_queue = asyncio.Queue()
-        ruleset_queues = [RuleSetQueue(mock_ruleset, source_queue)]
+        ruleset_queues = [
+            RuleSetQueue(mock_ruleset, source_queue, asyncio.Queue())
+        ]
         variables = {"test": "value"}
 
         # Mock dependencies
@@ -717,7 +719,9 @@ class TestRunRulesets:
         )
 
         source_queue = asyncio.Queue()
-        ruleset_queues = [RuleSetQueue(mock_ruleset, source_queue)]
+        ruleset_queues = [
+            RuleSetQueue(mock_ruleset, source_queue, asyncio.Queue())
+        ]
         variables = {}
 
         # Mock parsed_args with heartbeat
@@ -786,7 +790,9 @@ class TestRunRulesets:
         )
 
         source_queue = asyncio.Queue()
-        ruleset_queues = [RuleSetQueue(mock_ruleset, source_queue)]
+        ruleset_queues = [
+            RuleSetQueue(mock_ruleset, source_queue, asyncio.Queue())
+        ]
         variables = {}
 
         with patch(
@@ -858,7 +864,9 @@ class TestRunRulesets:
         )
 
         source_queue = asyncio.Queue()
-        ruleset_queues = [RuleSetQueue(mock_ruleset, source_queue)]
+        ruleset_queues = [
+            RuleSetQueue(mock_ruleset, source_queue, asyncio.Queue())
+        ]
         variables = {}
         inventory = "/path/to/inventory"
 
@@ -925,7 +933,9 @@ class TestRunRulesets:
         )
 
         source_queue = asyncio.Queue()
-        ruleset_queues = [RuleSetQueue(mock_ruleset, source_queue)]
+        ruleset_queues = [
+            RuleSetQueue(mock_ruleset, source_queue, asyncio.Queue())
+        ]
         variables = {}
 
         with patch(

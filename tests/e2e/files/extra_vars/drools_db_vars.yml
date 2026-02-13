@@ -1,0 +1,4 @@
+---
+drools_db_type: h2
+drools_db_file_path: /tmp/my.h2
+json_data_file: /tmp/items.json

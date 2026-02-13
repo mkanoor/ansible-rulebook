@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 
 CLIENT_CONNECT_ERROR_STRING = "Error connecting to controller: %s"
+JOB_TEMPLATE_TYPE = "job_template"
+WORKFLOW_TEMPLATE_TYPE = "workflow_template"
 
 
 class JobTemplateRunner:
@@ -184,13 +186,18 @@ class JobTemplateRunner:
             else:
                 break
 
-    async def run_job_template(
+    async def launch_job_template(
         self,
         name: str,
         organization: str,
         job_params: dict,
         labels: Optional[list[str]] = None,
-    ) -> dict:
+    ) -> str:
+        """Launch a job template and return the job URL immediately.
+
+        Returns:
+            str: The job URL for monitoring
+        """
         obj = await self._get_template_obj(name, organization, "job_template")
         if not obj:
             raise JobTemplateNotFoundException(
@@ -213,15 +220,32 @@ class JobTemplateRunner:
 
         url = urljoin(self.host, obj["launch"])
         job = await self._launch(job_params, url)
-        return await self._monitor_job(job["url"])
+        return job["url"]
 
-    async def run_workflow_job_template(
+    async def run_job_template(
         self,
         name: str,
         organization: str,
         job_params: dict,
         labels: Optional[list[str]] = None,
     ) -> dict:
+        job_url = await self.launch_job_template(
+            name, organization, job_params, labels
+        )
+        return await self.monitor_job(job_url)
+
+    async def launch_workflow_job_template(
+        self,
+        name: str,
+        organization: str,
+        job_params: dict,
+        labels: Optional[list[str]] = None,
+    ) -> str:
+        """Launch a workflow job template and return the job URL immediately.
+
+        Returns:
+            str: The job URL for monitoring
+        """
         obj = await self._get_template_obj(
             name, organization, "workflow_job_template"
         )
@@ -251,9 +275,21 @@ class JobTemplateRunner:
             )
             job_params.pop("limit")
         job = await self._launch(job_params, url)
-        return await self._monitor_job(job["url"])
+        return job["url"]
 
-    async def _monitor_job(self, url) -> dict:
+    async def run_workflow_job_template(
+        self,
+        name: str,
+        organization: str,
+        job_params: dict,
+        labels: Optional[list[str]] = None,
+    ) -> dict:
+        job_url = await self.launch_workflow_job_template(
+            name, organization, job_params, labels
+        )
+        return await self.monitor_job(job_url)
+
+    async def monitor_job(self, url) -> dict:
         while True:
             # fetch and process job status
             json_body = await self._get_page(url, {})
@@ -394,6 +430,45 @@ class JobTemplateRunner:
                 name,
             )
         return []
+
+    async def get_job_url_from_label(
+        self, name: str, organization: str, obj_type: str, label: str
+    ) -> Optional[str]:
+        if obj_type == JOB_TEMPLATE_TYPE:
+            obj = await self._get_template_obj(
+                name, organization, "job_template"
+            )
+            if not obj:
+                raise JobTemplateNotFoundException(
+                    (
+                        f"Job template {name} in organization "
+                        f"{organization} does not exist"
+                    )
+                )
+            label_slug = f"job_templates/{obj.id}/jobs/"
+        elif obj_type == WORKFLOW_TEMPLATE_TYPE:
+            obj = await self._get_template_obj(
+                name, organization, "workflow_job_template"
+            )
+            if not obj:
+                raise WorkflowJobTemplateNotFoundException(
+                    (
+                        f"Workflow template {name} in organization "
+                        f"{organization} does not exist"
+                    )
+                )
+            label_slug = f"workflow_job_templates/{obj.id}/workflow_jobs/"
+        else:
+            raise ValueError(
+                f"Invalid type {obj_type} passed into job_url_from_label"
+            )
+
+        params = dict("labels__name", label)
+        result = await self._get_page(label_slug, params)
+        if result["count"] >= 1:
+            return result["results"][0]["url"]
+
+        return None
 
 
 job_template_runner = JobTemplateRunner()
