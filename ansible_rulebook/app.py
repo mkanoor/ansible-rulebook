@@ -33,7 +33,7 @@ from ansible_rulebook.common import StartupArgs
 from ansible_rulebook.conf import settings
 from ansible_rulebook.engine import run_rulesets, start_source
 from ansible_rulebook.job_template_runner import job_template_runner
-from ansible_rulebook.rule_types import RuleSet, RuleSetQueue
+from ansible_rulebook.rule_types import EventSource, RuleSet, RuleSetQueue
 from ansible_rulebook.util import (
     decryptable,
     decrypted_context,
@@ -50,6 +50,7 @@ from ansible_rulebook.websocket import (
 
 from .exception import (
     ControllerNeededException,
+    DuplicateSourceNamesException,
     InvalidUrlException,
     InventoryNeededException,
     InventoryNotFound,
@@ -259,7 +260,16 @@ def spawn_sources(
     ruleset_queues = []
     for ruleset in rulesets:
         source_queue = asyncio.Queue(1)
+        source_feedback_queues = {}
+        source_names = []
         for source in ruleset.sources:
+            feedback_queue = _get_feedback_queue(
+                source, source_names, source_feedback_queues
+            )
+            if feedback_queue:
+                source_feedback_queues[source.name] = feedback_queue
+
+            source_names.append(source.name)
             task = asyncio.create_task(
                 start_source(
                     source,
@@ -268,11 +278,43 @@ def spawn_sources(
                     source_queue,
                     shutdown_delay,
                     filter_dirs,
+                    feedback_queue,
                 )
             )
             tasks.append(task)
-        ruleset_queues.append(RuleSetQueue(ruleset, source_queue))
+        ruleset_queues.append(
+            RuleSetQueue(ruleset, source_queue, source_feedback_queues)
+        )
     return tasks, ruleset_queues
+
+
+def _get_feedback_queue(
+    source: EventSource,
+    source_names: List[str],
+    source_feedback_queues: Dict[str, asyncio.Queue],
+) -> Optional[asyncio.Queue]:
+    feedback_queue = None
+    if (
+        settings.persistence_enabled
+        and source.source_args
+        and source.source_args.get("feedback", False)
+    ):
+        if (
+            source.name in source_feedback_queues
+            or source.name in source_names
+        ):
+            msg = (
+                "To support feedback when multiple sources "
+                "are defined in a ruleset, it is recommended "
+                "that each source have a unique name to prevent "
+                "conflicts and the feedbacks get sent to the "
+                "correct source plugin"
+            )
+            raise DuplicateSourceNamesException(msg)
+
+        feedback_queue = asyncio.Queue(1)
+
+    return feedback_queue
 
 
 def validate_variables(startup_args: StartupArgs) -> None:

@@ -214,3 +214,7 @@ class InvalidUrlException(Exception):
 
 class ControllerObjectCreateException(Exception):
     pass
+
+
+class DuplicateSourceNamesException(Exception):
+    pass
