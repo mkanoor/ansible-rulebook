@@ -56,7 +56,9 @@ def load_rulebook(rules_file):
     rulesets = parse_rule_sets(data)
     pprint(rulesets)
 
-    ruleset_queues = [(ruleset, asyncio.Queue()) for ruleset in rulesets]
+    ruleset_queues = [
+        (ruleset, asyncio.Queue(), asyncio.Queue()) for ruleset in rulesets
+    ]
 
     event_log = asyncio.Queue()
 

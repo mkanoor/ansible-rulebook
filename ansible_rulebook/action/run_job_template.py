@@ -25,7 +25,10 @@ from ansible_rulebook.exception import (
     ControllerApiException,
     JobTemplateNotFoundException,
 )
-from ansible_rulebook.job_template_runner import job_template_runner
+from ansible_rulebook.job_template_runner import (
+    JOB_TEMPLATE_TYPE,
+    job_template_runner,
+)
 from ansible_rulebook.util import process_controller_host_limit, run_at
 
 from .control import Control
@@ -84,6 +87,19 @@ class RunJobTemplate:
         if self.action_args.get("retry", False):
             retries = max(self.action_args.get("retries", 0), 1)
         delay = self.action_args.get("delay", 0)
+        add_event_uuid_label = self.action_args.get(
+            "add_event_uuid_label", False
+        )
+        job_labels = self.action_args.get("labels", [])
+        if add_event_uuid_label:
+            job_labels += [self.helper.get_event_uuid_label()]
+
+        job_url = await self.helper.get_old_job_url(
+            self.name,
+            self.organization,
+            JOB_TEMPLATE_TYPE,
+            add_event_uuid_label,
+        )
 
         try:
             for i in range(retries + 1):
@@ -95,12 +111,20 @@ class RunJobTemplate:
                         i,
                         retries,
                     )
-                controller_job = await job_template_runner.run_job_template(
-                    self.name,
-                    self.organization,
-                    self.job_args,
-                    self.action_args.get("labels"),
-                )
+                # Launch the job and get URL immediately
+                if not job_url:
+                    job_url = await job_template_runner.launch_job_template(
+                        self.name,
+                        self.organization,
+                        self.job_args,
+                        job_labels,
+                    )
+                    logger.info(f"Job Launched, url: {job_url}")
+                    self.helper.update_action_state({"job_url": job_url})
+
+                # Monitor the job until completion
+                controller_job = await job_template_runner.monitor_job(job_url)
+
                 if controller_job["status"] != "failed":
                     break
         except (ControllerApiException, JobTemplateNotFoundException) as ex:

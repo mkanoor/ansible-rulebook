@@ -145,6 +145,11 @@ def get_parser() -> argparse.ArgumentParser:
         "the results to be communicated back to the websocket.",
     )
     parser.add_argument(
+        "--persistence-id",
+        help="Identifier, the persistence id which allows "
+        "for the data to be saved across multipl restarts.",
+    )
+    parser.add_argument(
         "-w",
         "--worker",
         action="store_true",
