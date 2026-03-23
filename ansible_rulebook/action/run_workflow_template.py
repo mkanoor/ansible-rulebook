@@ -89,7 +89,7 @@ class RunWorkflowTemplate:
         add_event_uuid_label = self.action_args.get(
             "add_event_uuid_label", False
         )
-        job_labels = list(self.action_args.get("labels", []))
+        job_labels = list(self.action_args.get("labels") or [])
         if add_event_uuid_label:
             job_labels.append(self.helper.get_event_uuid_label())
 
