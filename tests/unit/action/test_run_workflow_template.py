@@ -308,3 +308,58 @@ async def test_run_workflow_template_url(job_id):
             assert ((not job_id) and (action["url"] == "")) or (
                 job_id and (action["url"] != "")
             )
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_template_with_null_labels():
+    """Verify labels: null in rulebook YAML does not raise TypeError."""
+    queue = asyncio.Queue()
+    metadata = Metadata(
+        rule="r1",
+        rule_set="rs1",
+        rule_uuid="u1",
+        rule_set_uuid="u2",
+        rule_run_at="abc",
+    )
+    control = Control(
+        queue=queue,
+        inventory="abc",
+        hosts=["all"],
+        variables={"a": 1},
+        project_data_file="",
+    )
+    action_args = {
+        "name": "fred",
+        "organization": "Default",
+        "retries": 0,
+        "retry": True,
+        "delay": 0,
+        "set_facts": True,
+        "labels": None,
+    }
+    controller_job = {
+        "status": "successful",
+        "rc": 0,
+        "artifacts": dict(b=1),
+        "created": "abc",
+        "id": 10,
+    }
+    with patch(
+        "ansible_rulebook.action.run_workflow_template."
+        "job_template_runner.launch_workflow_job_template",
+        return_value="https://www.example.com",
+    ):
+        with patch(
+            "ansible_rulebook.action.run_workflow_template."
+            "job_template_runner.monitor_job",
+            return_value=controller_job,
+        ):
+            with patch(
+                "ansible_rulebook.action.run_workflow_template."
+                "lang.assert_fact"
+            ):
+                await RunWorkflowTemplate(
+                    metadata, control, **action_args
+                )()
+
+        _validate(queue, True)
