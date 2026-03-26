@@ -252,6 +252,12 @@ class RuleSetRunner:
                     await self.event_log.put(dict(type="EmptyEvent"))
                     continue
 
+                # Feedback must be sent for any event the engine
+                # received, even if already observed or unhandled,
+                # so the source can advance. Without this, feedback-
+                # enabled sources deadlock waiting for a response
+                # that never arrives.
+                send_feedback = False
                 try:
                     logger.debug(
                         "Posting data to ruleset %s => %s",
@@ -259,7 +265,35 @@ class RuleSetRunner:
                         str(data),
                     )
                     lang.post(self.name, data)
+                    send_feedback = True
+                except asyncio.CancelledError:
+                    raise
+                except MessageObservedException:
+                    logger.debug("MessageObservedException: %s", data)
+                    send_feedback = True
+                except MessageNotHandledException:
+                    logger.debug("MessageNotHandledException: %s", data)
+                    send_feedback = True
+                except BaseException as e:
+                    # On unexpected errors skip feedback; the event
+                    # state is unknown.
+                    logger.error(e)
+                finally:
+                    logger.debug(lang.get_pending_events(self.name))
+                    if (
+                        settings.gc_after
+                        and self.event_counter > settings.gc_after
+                    ):
+                        self.event_counter = 0
+                        gc.collect()
+                    else:
+                        self.event_counter += 1
+                    while self.ruleset_queue_plan.plan.queue.qsize() > 10:
+                        await asyncio.sleep(0)
 
+                # Send feedback outside the try/except so it runs
+                # regardless of which lang.post() outcome occurred.
+                if send_feedback:
                     try:
                         source_name = dpath.get(data, "meta/source/name")
                     except KeyError:
@@ -276,26 +310,6 @@ class RuleSetRunner:
                             )
                         )
                         await feedback_queue.put(data)
-                except asyncio.CancelledError:
-                    raise
-                except MessageObservedException:
-                    logger.debug("MessageObservedException: %s", data)
-                except MessageNotHandledException:
-                    logger.debug("MessageNotHandledException: %s", data)
-                except BaseException as e:
-                    logger.error(e)
-                finally:
-                    logger.debug(lang.get_pending_events(self.name))
-                    if (
-                        settings.gc_after
-                        and self.event_counter > settings.gc_after
-                    ):
-                        self.event_counter = 0
-                        gc.collect()
-                    else:
-                        self.event_counter += 1
-                    while self.ruleset_queue_plan.plan.queue.qsize() > 10:
-                        await asyncio.sleep(0)
         except asyncio.CancelledError:
             logger.debug("Source Task Cancelled for ruleset %s", self.name)
             raise
