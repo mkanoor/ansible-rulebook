@@ -38,6 +38,8 @@ class _Settings:
         self.eda_labels = [DEFAULT_EDA_LABEL]
         self.persistence_enabled = False
         self.persistence_id = None
+        self.sleep_min = 5
+        self.sleep_max = 20
 
 
 settings = _Settings()

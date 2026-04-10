@@ -224,6 +224,9 @@
                             },
                             {
                                 "$ref": "#/$defs/pg-notify-action"
+                            },
+                            {
+                                "$ref": "#/$defs/sleep-action"
                             }
                         ]
                     }
@@ -265,6 +268,9 @@
                         },
                         {
                             "$ref": "#/$defs/pg-notify-action"
+                        },
+                        {
+                            "$ref": "#/$defs/sleep-action"
                         }
                     ]
                 }
@@ -803,6 +809,33 @@
             },
             "required": [
                 "shutdown"
+            ],
+            "additionalProperties": false
+        },
+        "sleep-action": {
+            "type": "object",
+            "properties": {
+                "sleep": {
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "properties": {
+                        "min_seconds": {
+                            "type": "number"
+                        },
+                        "max_seconds": {
+                            "type": "number"
+                        }
+                    },
+                    "required": [
+                        "min_seconds"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "sleep"
             ],
             "additionalProperties": false
         }

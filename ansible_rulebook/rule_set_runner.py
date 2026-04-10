@@ -50,11 +50,39 @@ from ansible_rulebook.action.run_playbook import RunPlaybook
 from ansible_rulebook.action.run_workflow_template import RunWorkflowTemplate
 from ansible_rulebook.action.set_fact import SetFact
 from ansible_rulebook.action.shutdown import Shutdown as ShutdownAction
+from ansible_rulebook.action.sleep import Sleep
 from ansible_rulebook.conf import settings
 from ansible_rulebook.exception import (
     ShutdownException,
     UnsupportedActionException,
 )
+from ansible_rulebook.mem_controller import (
+    event_queue_speed_breaker,
+    global_action_semaphore,
+    measure_baseline,
+)
+
+# Memory profiling
+try:
+    import sys
+
+    sys.path.insert(0, "/Users/madhukanoor/devsrc/ansible-rulebook")
+    from memory_profiler_helper import compare, mark, start_memory_trace
+
+    MEMORY_PROFILING_ENABLED = True
+except ImportError:
+    MEMORY_PROFILING_ENABLED = False
+
+    def start_memory_trace():
+        pass
+
+    def mark(label):
+        pass
+
+    def compare(l1, l2):
+        pass
+
+
 from ansible_rulebook.messages import Shutdown
 from ansible_rulebook.persistence import (
     get_action_a_priori,
@@ -86,6 +114,7 @@ ACTION_CLASSES = {
     "post_event": PostEvent,
     "retract_fact": RetractFact,
     "shutdown": ShutdownAction,
+    "sleep": Sleep,
     "run_playbook": RunPlaybook,
     "run_module": RunModule,
     "run_job_template": RunJobTemplate,
@@ -123,6 +152,9 @@ class RuleSetRunner:
         self.locks = defaultdict(asyncio.Lock)
 
     async def run_ruleset(self):
+        # Measure baseline before starting event processing
+        await measure_baseline("before_run_ruleset")
+
         tasks = []
         try:
             prime_facts(self.name, self.hosts_facts)
@@ -224,10 +256,30 @@ class RuleSetRunner:
         return
 
     async def _drain_source_queue(self):
+        # Measure baseline before starting to receive events
+        await measure_baseline("before_drain_source_queue")
+
+        # Start memory profiling
+        if MEMORY_PROFILING_ENABLED:
+            start_memory_trace()
+
         logger.info("Waiting for events, ruleset: %s", self.name)
+        count = 0
         try:
             while True:
+                await event_queue_speed_breaker()
+
+                # Mark: Before getting event
+                if MEMORY_PROFILING_ENABLED and count == 0:
+                    mark("before_first_event")
+
                 data = await self.ruleset_queue_plan.source_queue.get()
+                count += 1
+                print(f"Got New Event {count}")
+
+                # Mark: After getting event
+                if MEMORY_PROFILING_ENABLED and count == 1:
+                    mark("after_first_event_get")
                 # Default to output events at debug level.
                 level = logging.DEBUG
 
@@ -265,6 +317,11 @@ class RuleSetRunner:
                         str(data),
                     )
                     lang.post(self.name, data)
+
+                    # Mark: After posting to Drools
+                    if MEMORY_PROFILING_ENABLED and count == 1:
+                        mark("after_drools_post")
+
                     send_feedback = True
                 except asyncio.CancelledError:
                     raise
@@ -288,6 +345,14 @@ class RuleSetRunner:
                         gc.collect()
                     else:
                         self.event_counter += 1
+
+                    # Mark: After 10 events processed
+                    if MEMORY_PROFILING_ENABLED and count == 10:
+                        mark("after_10_events")
+                        compare("before_first_event", "after_first_event_get")
+                        compare("after_first_event_get", "after_drools_post")
+                        compare("before_first_event", "after_10_events")
+
                     while self.ruleset_queue_plan.plan.queue.qsize() > 10:
                         await asyncio.sleep(0)
 
@@ -477,6 +542,27 @@ class RuleSetRunner:
         return task
 
     async def _call_action(
+        self,
+        metadata: Metadata,
+        action: str,
+        immutable_action_args: MappingProxyType,
+        variables: Dict,
+        inventory: str,
+        hosts: List,
+        rules_engine_result,
+    ) -> None:
+        async with global_action_semaphore:
+            await self._execute_action(
+                metadata,
+                action,
+                immutable_action_args,
+                variables,
+                inventory,
+                hosts,
+                rules_engine_result,
+            )
+
+    async def _execute_action(
         self,
         metadata: Metadata,
         action: str,
