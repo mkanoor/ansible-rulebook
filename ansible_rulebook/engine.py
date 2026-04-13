@@ -33,7 +33,12 @@ from ansible_rulebook.collection import (
     has_source_filter,
     split_collection_name,
 )
+from ansible_rulebook.event_store_manager import (
+    get_event_store,
+    set_event_store,
+)
 from ansible_rulebook.messages import Shutdown
+from ansible_rulebook.mmap_event_store import get_mmap_store
 from ansible_rulebook.persistence import enable_leader, enable_persistence
 from ansible_rulebook.rule_set_runner import RuleSetRunner
 from ansible_rulebook.rule_types import (
@@ -41,6 +46,7 @@ from ansible_rulebook.rule_types import (
     EventSourceFilter,
     RuleSetQueue,
 )
+from ansible_rulebook.shared_memory_event_store import get_shared_memory_store
 from ansible_rulebook.util import (
     collect_ansible_facts,
     find_builtin_filter,
@@ -316,6 +322,64 @@ async def run_rulesets(
         handle_async_messages(reader, writer), name="drools_async_task"
     )
 
+    # Initialize event storage backend (SharedMemory or mmap)
+    # Default to 20MB max size with 85% threshold, using mmap backend
+    # These can be overridden by parsed_args if needed
+    max_size_mb = 20
+    threshold_pct = 85.0
+    sleep_duration = 0.5
+    max_retries = 10
+    backend = "mmap"  # Default backend
+
+    # Check if parsed_args provides custom values
+    if parsed_args:
+        max_size_mb = getattr(parsed_args, "event_memory_size_mb", max_size_mb)
+        threshold_pct = getattr(
+            parsed_args, "event_memory_threshold_pct", threshold_pct
+        )
+        backend = getattr(parsed_args, "event_storage_backend", backend)
+
+    try:
+        if backend == "mmap":
+            # Use anonymous mmap (auto-cleanup, single-process only)
+            store = await get_mmap_store(
+                max_size_mb=max_size_mb,
+                threshold_pct=threshold_pct,
+                sleep_duration=sleep_duration,
+                max_retries=max_retries,
+            )
+            logger.info(
+                "Mmap event store initialized: max_size=%d MB, threshold=%.1f%% "
+                "(anonymous mmap, auto-cleanup, single-process)",
+                max_size_mb,
+                threshold_pct,
+            )
+        else:
+            # Use SharedMemory (default, supports multi-process)
+            store = get_shared_memory_store(
+                max_size_mb=max_size_mb,
+                threshold_pct=threshold_pct,
+                sleep_duration=sleep_duration,
+                max_retries=max_retries,
+            )
+            logger.info(
+                "SharedMemory event store initialized: max_size=%d MB, threshold=%.1f%% "
+                "(multiprocessing.shared_memory, /dev/shm)",
+                max_size_mb,
+                threshold_pct,
+            )
+
+        # Set the global event store instance for use by other modules
+        set_event_store(store)
+
+    except Exception as e:
+        logger.warning(
+            "Failed to initialize %s event store, "
+            "event storage will use legacy mode: %s",
+            backend,
+            e,
+        )
+
     enable_persistence(parsed_args, variables)
     rulesets_queue_plans = rule_generator.generate_rulesets(
         ruleset_queues, variables, inventory
@@ -394,6 +458,80 @@ async def run_rulesets(
     logger.debug("Returning from run_rulesets")
     if send_heartbeat_task:
         send_heartbeat_task.cancel()
+
+    # Clean up event storage backend
+    try:
+        store = get_event_store()
+        backend_name = "Mmap" if backend == "mmap" else "SharedMemory"
+
+        stats = store.get_stats()
+
+        # Log summary statistics
+        logger.info("=" * 70)
+        logger.info("%s EVENT STORE SHUTDOWN SUMMARY", backend_name.upper())
+        logger.info("=" * 70)
+        logger.info("Total events added:    %d", stats["total_adds"])
+        logger.info("Total events removed:  %d", stats["total_removes"])
+        logger.info("Events still in store: %d", stats["current_events"])
+        logger.info("Peak memory usage:     %.2f MB", stats["peak_usage_mb"])
+        logger.info(
+            "Current memory usage:  %.2f MB (%.1f%%)",
+            stats["used_mb"],
+            stats["usage_percent"],
+        )
+        logger.info(
+            "Total backpressure:    %d times blocked", stats["total_blocked"]
+        )
+
+        # Check for memory leaks
+        leak_count = stats["total_adds"] - stats["total_removes"]
+        if leak_count != stats["current_events"]:
+            logger.error(
+                "EVENT LEAK DETECTED: Add/Remove mismatch! "
+                "Expected %d unreleased events, but found %d in store",
+                leak_count,
+                stats["current_events"],
+            )
+
+        # Warn if events were not cleaned up
+        if stats["current_events"] > 0:
+            logger.warning(
+                "⚠️  %d UNRELEASED EVENTS STILL IN MEMORY",
+                stats["current_events"],
+            )
+            logger.warning(
+                "This indicates events were not properly removed. "
+                "Check that all actions completed and called remove_event()."
+            )
+
+            # Get detailed diagnostics if available
+            diag = store.get_detailed_diagnostics()
+            if "refcount_distribution" in diag:
+                logger.warning("Refcount distribution:")
+                for refcount, count in sorted(
+                    diag["refcount_distribution"].items()
+                ):
+                    logger.warning("  refcount=%d: %d events", refcount, count)
+
+            logger.warning(
+                "Memory not freed: %.2f MB of %.2f MB",
+                stats["used_mb"],
+                stats["max_size_mb"],
+            )
+        else:
+            logger.info(
+                "✅ All events properly cleaned up - no memory leaks detected"
+            )
+
+        logger.info("=" * 70)
+
+        store.close()
+        logger.info("%s event store closed successfully", backend_name)
+    except Exception as e:
+        logger.debug(
+            "Failed to cleanup event store (may not have been initialized): %s",
+            e,
+        )
 
     return should_reload
 

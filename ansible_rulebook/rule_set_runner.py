@@ -50,7 +50,9 @@ from ansible_rulebook.action.run_playbook import RunPlaybook
 from ansible_rulebook.action.run_workflow_template import RunWorkflowTemplate
 from ansible_rulebook.action.set_fact import SetFact
 from ansible_rulebook.action.shutdown import Shutdown as ShutdownAction
+from ansible_rulebook.action.sleep import Sleep
 from ansible_rulebook.conf import settings
+from ansible_rulebook.event_store_manager import get_event_store
 from ansible_rulebook.exception import (
     ShutdownException,
     UnsupportedActionException,
@@ -91,6 +93,7 @@ ACTION_CLASSES = {
     "run_job_template": RunJobTemplate,
     "run_workflow_template": RunWorkflowTemplate,
     "pg_notify": PGNotify,
+    "sleep": Sleep,
 }
 
 
@@ -119,6 +122,7 @@ class RuleSetRunner:
         self.active_actions = set()
         self.broadcast_method = broadcast_method
         self.event_counter = 0
+        self.event_store_stats_interval = 1000  # Log stats every N events
         self.display = terminal.Display()
         self.locks = defaultdict(asyncio.Lock)
 
@@ -194,6 +198,127 @@ class RuleSetRunner:
             await send_session_stats(self.event_log, stats)
         logger.info(pformat(stats))
 
+    async def _check_event_store_backpressure(self, caller: str = "unknown"):
+        """
+        Check if event store has enough space available before processing next event.
+
+        Applies backpressure with exponential backoff if memory usage is near threshold.
+        This prevents queues from overwhelming the system with events
+        that cannot be stored in the event store (SharedMemory or mmap).
+
+        Uses different thresholds based on caller to create layered backpressure:
+        - SOURCE_QUEUE: Most conservative (threshold - 3%), blocks at genesis
+        - ACTIONPLAN_QUEUE: Moderate (threshold - 1%), blocks after Drools
+        - Others: Standard threshold
+
+        Uses exponential backoff to handle long-running tasks (configurable via settings):
+        - Initial wait: settings.shared_memory_initial_wait (default: 0.5s)
+        - Exponentially increases: 1s, 2s, 4s, 8s, 16s, 32s, ...
+        - Max per iteration: settings.shared_memory_max_wait_per_iteration (default: 60s)
+        - Total max wait: settings.shared_memory_max_total_wait (default: 3600s / 1 hour)
+        - Returns when space available or timeout reached
+
+        Args:
+            caller: Name of the calling function (for logging)
+
+        Returns:
+            None
+        """
+        store = get_event_store()
+
+        # Use more conservative threshold for earlier stages
+        # This ensures SOURCE_QUEUE blocks FIRST, before events enter the pipeline
+        if caller == "source_queue":
+            # Most conservative: block at threshold - 3% (e.g., 87% when threshold is 90%)
+            # This stops events at the genesis point
+            effective_threshold = store._threshold_pct - 3.0
+        elif caller == "actionplan_queue":
+            # Moderate: block at threshold - 1% (e.g., 89% when threshold is 90%)
+            # This handles events already in Drools pipeline
+            effective_threshold = store._threshold_pct - 1.0
+        else:
+            # Standard threshold for other callers
+            effective_threshold = store._threshold_pct
+
+        current_usage = store.get_usage_percent()
+
+        if current_usage < effective_threshold:
+            # Space available, no backpressure needed
+            return
+
+        # Exponential backoff configuration (from settings)
+        initial_wait = settings.shared_memory_initial_wait
+        max_wait_per_iteration = settings.shared_memory_max_wait_per_iteration
+        max_total_wait = settings.shared_memory_max_total_wait
+        backoff_multiplier = 2  # Double the wait time each iteration
+
+        current_wait = initial_wait
+        total_wait = 0
+        check_count = 0
+        last_log_time = 0
+        log_interval = 30  # Log every 30 seconds
+
+        logger.warning(
+            "[BACKPRESSURE:%s] Activated - usage %.1f%% >= %.1f%% threshold, "
+            "pausing queue processing (available: %.2f MB / %.2f MB)",
+            caller.upper(),
+            current_usage,
+            effective_threshold,
+            store.get_available_space_mb(),
+            store._max_size_bytes / (1024 * 1024),
+        )
+
+        while store.get_usage_percent() >= effective_threshold:
+            check_count += 1
+
+            # Check if we've exceeded max total wait time
+            if total_wait >= max_total_wait:
+                logger.error(
+                    "[BACKPRESSURE:%s] Event store still near threshold after "
+                    "%.1f seconds (%.1f%%), forcing through to prevent "
+                    "deadlock (max wait: %d seconds reached)",
+                    caller.upper(),
+                    total_wait,
+                    store.get_usage_percent(),
+                    max_total_wait,
+                )
+                break
+
+            # Log only every 30 seconds
+            if total_wait - last_log_time >= log_interval:
+                last_log_time = total_wait
+                logger.warning(
+                    "[BACKPRESSURE:%s] Still waiting for space - elapsed %.1fs / %ds "
+                    "(usage: %.1f%% >= %.1f%% threshold, available: %.2f MB)",
+                    caller.upper(),
+                    total_wait,
+                    max_total_wait,
+                    store.get_usage_percent(),
+                    effective_threshold,
+                    store.get_available_space_mb(),
+                )
+
+            # Sleep with current wait time
+            await asyncio.sleep(current_wait)
+            total_wait += current_wait
+
+            # Calculate next wait time with exponential backoff
+            current_wait = min(
+                current_wait * backoff_multiplier, max_wait_per_iteration
+            )
+
+        # Space became available
+        if total_wait > 0:
+            logger.info(
+                "[BACKPRESSURE:%s] Released after %.1fs - resuming event processing "
+                "(usage: %.1f%% < %.1f%% threshold, available: %.2f MB, ready to fetch new events)",
+                caller.upper(),
+                total_wait,
+                store.get_usage_percent(),
+                effective_threshold,
+                store.get_available_space_mb(),
+            )
+
     async def _handle_shutdown(self):
         logger.info(
             "Ruleset: %s, received shutdown: %s",
@@ -227,6 +352,12 @@ class RuleSetRunner:
         logger.info("Waiting for events, ruleset: %s", self.name)
         try:
             while True:
+                # Check event store availability before fetching next event
+                # This provides PRIMARY backpressure at the source level (genesis of events)
+                await self._check_event_store_backpressure(
+                    caller="source_queue"
+                )
+
                 data = await self.ruleset_queue_plan.source_queue.get()
                 # Default to output events at debug level.
                 level = logging.DEBUG
@@ -288,6 +419,30 @@ class RuleSetRunner:
                         gc.collect()
                     else:
                         self.event_counter += 1
+
+                    # Log event store statistics periodically to verify cleanup
+                    if (
+                        self.event_counter % self.event_store_stats_interval
+                        == 0
+                    ):
+                        try:
+                            store = get_event_store()
+                            stats = store.get_stats()
+                            logger.info(
+                                "[EVENT STORE] After %d events: %d in store, "
+                                "%.2f MB used (%.1f%%), adds=%d, removes=%d",
+                                self.event_counter,
+                                stats["current_events"],
+                                stats["used_mb"],
+                                stats["usage_percent"],
+                                stats["total_adds"],
+                                stats["total_removes"],
+                            )
+                        except Exception as e:
+                            logger.debug(
+                                "Failed to get event store stats: %s", e
+                            )
+
                     while self.ruleset_queue_plan.plan.queue.qsize() > 10:
                         await asyncio.sleep(0)
 
@@ -362,6 +517,12 @@ class RuleSetRunner:
         logger.info("Waiting for actions on events from %s", self.name)
         try:
             while True:
+                # Check event store availability before processing next action
+                # This provides SECONDARY backpressure for events already queued from Drools
+                await self._check_event_store_backpressure(
+                    caller="actionplan_queue"
+                )
+
                 queue_item = await self.ruleset_queue_plan.plan.queue.get()
                 rule_run_at = run_at()
                 action_item = cast(ActionContext, queue_item)
@@ -512,6 +673,7 @@ class RuleSetRunner:
         error = None
         action_status = FAILED_STATUS
         cancelled = False
+        event_uuids = []  # Track event UUIDs for cleanup
         if action in ACTION_CLASSES:
             try:
                 if (
@@ -545,16 +707,57 @@ class RuleSetRunner:
                     variables_copy = mask_sensitive_variable_values(
                         variables_copy
                     )
+
+                # Get event store (always available, initialized in engine.py)
+                store = get_event_store()
+
                 if single_match is not None:
-                    variables_copy["event"] = single_match
                     event = single_match
+
+                    # Add event to event store and get lazy reference for variables
+                    if event:
+                        event_uuid = await store.add_event(
+                            event, caller="call_action"
+                        )
+                        event_uuids.append(event_uuid)
+                        # Store LazyEventDict directly in variables for Jinja2 template rendering
+                        variables_copy["event"] = store.get_event_lazy(
+                            event_uuid
+                        )
+                        logger.debug(
+                            "[RULE_SET_RUNNER] Added event %s to event store and stored lazy reference",
+                            event_uuid[:8]
+                            if len(event_uuid) > 8
+                            else event_uuid,
+                        )
+                    else:
+                        variables_copy["event"] = event
+
                     if "meta" in event:
                         if "hosts" in event["meta"]:
                             hosts = parse_hosts(event["meta"]["hosts"])
                 else:
-                    variables_copy["events"] = multi_match
+                    # Multiple events - add all to event store and get lazy references
+                    lazy_event_map = {}
+                    for key, event in multi_match.items():
+                        event_uuid = await store.add_event(
+                            event, caller="call_action"
+                        )
+                        event_uuids.append(event_uuid)
+                        # Store LazyEventDict directly in variables for Jinja2 template rendering
+                        lazy_event_map[key] = store.get_event_lazy(event_uuid)
+                        logger.debug(
+                            "[RULE_SET_RUNNER] Added event %s (%s) to event store and stored lazy reference",
+                            key,
+                            event_uuid[:8]
+                            if len(event_uuid) > 8
+                            else event_uuid,
+                        )
+                    variables_copy["events"] = lazy_event_map
+
+                    # Extract hosts from events
                     new_hosts = []
-                    for event in variables_copy["events"].values():
+                    for event in multi_match.values():
                         if "meta" in event:
                             if "hosts" in event["meta"]:
                                 new_hosts.extend(
@@ -648,6 +851,28 @@ class RuleSetRunner:
                 logger.error(e)
                 raise
             finally:
+                # Clean up events from event store
+                if event_uuids:
+                    store = get_event_store()
+                    for event_uuid in event_uuids:
+                        deleted = await store.remove_event(event_uuid)
+                        if deleted:
+                            logger.debug(
+                                "[RULE_SET_RUNNER] Event %s removed from event store "
+                                "(refcount=0, memory freed)",
+                                event_uuid[:8]
+                                if len(event_uuid) > 8
+                                else event_uuid,
+                            )
+                        else:
+                            logger.debug(
+                                "[RULE_SET_RUNNER] Event %s refcount decremented "
+                                "(still referenced by other rules)",
+                                event_uuid[:8]
+                                if len(event_uuid) > 8
+                                else event_uuid,
+                            )
+
                 if (
                     metadata.persistent_info
                     and metadata.persistent_info.matching_uuid

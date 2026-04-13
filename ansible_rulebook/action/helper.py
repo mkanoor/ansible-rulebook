@@ -115,11 +115,35 @@ class Helper:
         m key for single event stored in the event key
         m_0,m_1,.... for multiple matching events stored in
         the events key
+
+        Events can be stored in two ways:
+        1. Full event dictionaries directly in control.variables (legacy)
+        2. LazyEventDict instances with memoryview refs from event store
+
+        This method handles both approaches and converts LazyEventDict to
+        plain dicts for serialization (needed for queue.put() operations).
         """
+        # Handle single event
         if "event" in self.control.variables:
-            return {"m": self.control.variables["event"]}
+            event_data = self.control.variables["event"]
+            # Convert LazyEventDict to plain dict if needed
+            if hasattr(event_data, "to_dict"):
+                return {"m": event_data.to_dict()}
+            else:
+                return {"m": event_data}
+
+        # Handle multiple events
         if "events" in self.control.variables:
-            return self.control.variables["events"]
+            events_data = self.control.variables["events"]
+            # Convert each LazyEventDict to plain dict if needed
+            if isinstance(events_data, dict):
+                return {
+                    k: v.to_dict() if hasattr(v, "to_dict") else v
+                    for k, v in events_data.items()
+                }
+            else:
+                return events_data
+
         return {}
 
     def embellish_internal_event(self, event: Dict) -> Dict:
@@ -154,10 +178,27 @@ class Helper:
             "ruleset": self.metadata.rule_set,
             "rule": self.metadata.rule,
         }
+
+        # Convert LazyEventDict instances to plain dicts for YAML serialization
+        # LazyEventDict holds memoryview refs that can't be serialized to YAML
         if "events" in self.control.variables:
-            eda_vars["events"] = self.control.variables["events"]
+            events_data = self.control.variables["events"]
+            # Convert each event in the dict if it has to_dict method
+            if isinstance(events_data, dict):
+                eda_vars["events"] = {
+                    k: v.to_dict() if hasattr(v, "to_dict") else v
+                    for k, v in events_data.items()
+                }
+            else:
+                eda_vars["events"] = events_data
+
         if "event" in self.control.variables:
-            eda_vars["event"] = self.control.variables["event"]
+            event_data = self.control.variables["event"]
+            # Convert to plain dict if it's a LazyEventDict
+            if hasattr(event_data, "to_dict"):
+                eda_vars["event"] = event_data.to_dict()
+            else:
+                eda_vars["event"] = event_data
 
         extra_vars[KEY_EDA_VARS] = eda_vars
         return extra_vars

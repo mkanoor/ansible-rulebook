@@ -219,6 +219,32 @@ def get_parser() -> argparse.ArgumentParser:
         "It can be configured with the environment variable EDA_GC_AFTER",
     )
     parser.add_argument(
+        "--event-memory-size-mb",
+        default=os.environ.get("EDA_EVENT_MEMORY_SIZE_MB", 20),
+        type=int,
+        help="Maximum size for event store in megabytes. "
+        "Default is 20 MB. Can also be passed via the env var "
+        "EDA_EVENT_MEMORY_SIZE_MB",
+    )
+    parser.add_argument(
+        "--event-memory-threshold-pct",
+        default=os.environ.get("EDA_EVENT_MEMORY_THRESHOLD_PCT", 85.0),
+        type=float,
+        help="Event store usage threshold percentage for backpressure. "
+        "When usage exceeds this threshold, event fetching will slow down. "
+        "Default is 85.0. Can also be passed via the env var "
+        "EDA_EVENT_MEMORY_THRESHOLD_PCT",
+    )
+    parser.add_argument(
+        "--event-storage-backend",
+        choices=["sharedmemory", "mmap"],
+        default=os.environ.get("EDA_EVENT_STORAGE_BACKEND", "mmap"),
+        help="Event storage backend implementation. "
+        "'mmap' uses anonymous memory mapping (default, auto-cleanup, single-process only), "
+        "'sharedmemory' uses multiprocessing.shared_memory (multi-process support). "
+        "Can also be passed via the env var EDA_EVENT_STORAGE_BACKEND",
+    )
+    parser.add_argument(
         "--heartbeat",
         default=0,
         type=int,

@@ -39,5 +39,12 @@ class _Settings:
         self.persistence_enabled = False
         self.persistence_id = None
 
+        # SharedMemory backpressure settings
+        self.shared_memory_max_total_wait = 3600  # 1 hour in seconds
+        self.shared_memory_initial_wait = 0.5  # Initial wait time in seconds
+        self.shared_memory_max_wait_per_iteration = (
+            60  # Cap at 60 seconds per sleep
+        )
+
 
 settings = _Settings()
