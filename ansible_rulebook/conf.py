@@ -12,16 +12,44 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import json
+import logging
+import os
 import shutil
 import uuid
+from typing import Any, Type
 
 from ansible_rulebook.vault import Vault
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_EDA_LABEL = "Activated by Event-Driven Ansible"
 
 
 class _Settings:
+    # Simple map: attribute_name -> (env_var_name, type)
+    # Only these settings can be updated from environment variables
+    ENV_MAP = {
+        "gc_after": ("EDA_GC_AFTER", int),
+        "default_execution_strategy": ("EDA_EXECUTION_STRATEGY", str),
+        "max_feedback_timeout": ("EDA_MAX_FEEDBACK_TIMEOUT", int),
+        "print_events": ("EDA_PRINT_EVENTS", bool),
+        "websocket_url": ("EDA_WEBSOCKET_URL", str),
+        "websocket_ssl_verify": ("EDA_WEBSOCKET_SSL_VERIFY", str),
+        "websocket_token_url": ("EDA_WEBSOCKET_TOKEN_URL", str),
+        "websocket_access_token": ("EDA_WEBSOCKET_ACCESS_TOKEN", str),
+        "websocket_refresh_token": ("EDA_WEBSOCKET_REFRESH_TOKEN", str),
+        "skip_audit_events": ("EDA_SKIP_AUDIT_EVENTS", bool),
+        "persistence_enabled": ("EDA_PERSISTENCE_ENABLED", bool),
+        "persistence_id": ("EDA_PERSISTENCE_ID", str),
+        "max_concurrent_actions": ("EDA_MAX_CONCURRENT_ACTIONS", int),
+        "max_back_pressure_timeout": ("EDA_MAX_BACK_PRESSURE_TIMEOUT", int),
+        "max_reporting_queue_size": ("EDA_MAX_REPORTING_QUEUE_SIZE", int),
+        "eda_labels": ("EDA_LABELS", list),
+    }
+
     def __init__(self):
+        # Set defaults first
         self.identifier = str(uuid.uuid4())
         self.gc_after = 1000
         self.default_execution_strategy = "sequential"
@@ -38,6 +66,56 @@ class _Settings:
         self.eda_labels = [DEFAULT_EDA_LABEL]
         self.persistence_enabled = False
         self.persistence_id = None
+        self.max_concurrent_actions = 0
+        self.max_actions_semaphore = None
+        self.max_back_pressure_timeout = 3600
+        self.max_reporting_queue_size = 50
+
+        # Update from env vars if they exist (initial load)
+        self.update_from_env()
+
+    def update_from_env(self):
+        """Update settings from environment variables (only if env var exists)
+
+        This is called:
+        1. On initialization to read initial env vars
+        2. After websocket handler sets new env vars
+        """
+        for attr_name, (env_key, type_class) in self.ENV_MAP.items():
+            env_value = os.environ.get(env_key)
+            if env_value is not None:  # Only update if env var exists
+                try:
+                    converted_value = self._convert_type(env_value, type_class)
+                    setattr(self, attr_name, converted_value)
+                except (ValueError, TypeError, json.JSONDecodeError) as e:
+                    logger.warning(
+                        f"Failed to convert env var {env_key}={env_value!r} "
+                        f"to type {type_class.__name__}: {e}"
+                    )
+
+    @staticmethod
+    def _convert_type(value: Any, target_type: Type) -> Any:
+        """Convert value to target type"""
+        if isinstance(value, target_type):
+            return value
+
+        if target_type == bool:
+            if isinstance(value, str):
+                return value.lower() in ("true", "1", "yes", "on")
+            return bool(value)
+        elif target_type == list:
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    return [value]
+            return value if isinstance(value, list) else [value]
+        elif target_type == int:
+            return int(value)
+        elif target_type == str:
+            return str(value)
+
+        return value
 
 
 settings = _Settings()

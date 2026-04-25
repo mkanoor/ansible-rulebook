@@ -125,6 +125,28 @@ class RunWorkflowTemplate:
 
                 # Monitor the job until completion
                 controller_job = await job_template_runner.monitor_job(job_url)
+
+                # Log completion status
+                if controller_job["status"] == "successful":
+                    logger.info(
+                        "Workflow template '%s' completed successfully (job_id: %s)",
+                        self.name,
+                        controller_job.get("id"),
+                    )
+                elif controller_job["status"] in ["failed", "error"]:
+                    logger.error(
+                        "Workflow template '%s' %s (job_id: %s)",
+                        self.name,
+                        controller_job["status"],
+                        controller_job.get("id"),
+                    )
+                elif controller_job["status"] == "canceled":
+                    logger.warning(
+                        "Workflow template '%s' was canceled (job_id: %s)",
+                        self.name,
+                        controller_job.get("id"),
+                    )
+
                 if controller_job["status"] != "failed":
                     break
 

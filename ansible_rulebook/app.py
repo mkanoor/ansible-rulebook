@@ -61,11 +61,23 @@ from .exception import (
 
 
 class NullQueue:
+    """A no-op queue that discards all data.
+
+    Used when no websocket_url is configured (no EDA Server).
+    Implements asyncio.Queue interface for compatibility.
+    """
+
+    def __init__(self):
+        self.maxsize = 0
+
     async def put(self, _data):
         pass
 
     def qsize(self):
         return 0
+
+    def full(self):
+        return False
 
 
 logger = logging.getLogger(__name__)
@@ -127,11 +139,16 @@ async def run(parsed_args: argparse.Namespace) -> None:
     for k, v in startup_args.env_vars.items():
         os.environ[k] = str(v)
 
+    # Update the settings from env in worker mode
+    if parsed_args.worker:
+        settings.update_from_env()
+
+    setup_semaphores()
     if startup_args.check_controller_connection:
         await validate_controller_params(startup_args)
 
     if parsed_args.websocket_url:
-        event_log = asyncio.Queue()
+        event_log = asyncio.Queue(settings.max_reporting_queue_size)
     else:
         event_log = NullQueue()
 
@@ -368,3 +385,10 @@ async def validate_controller_params(startup_args: StartupArgs) -> None:
 
         data = await job_template_runner.get_config()
         logger.info("AAP Version %s", data["version"])
+
+
+def setup_semaphores():
+    if settings.max_concurrent_actions > 0:
+        settings.max_actions_semaphore = asyncio.Semaphore(
+            settings.max_concurrent_actions
+        )

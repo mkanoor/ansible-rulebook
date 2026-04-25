@@ -19,11 +19,13 @@ import os
 import ssl
 from functools import cached_property
 from http import HTTPStatus
+from json.decoder import JSONDecodeError
 from typing import Optional, Union
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
 import dpath
+from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ansible_rulebook import util
 from ansible_rulebook.conf import settings
@@ -33,6 +35,7 @@ from ansible_rulebook.exception import (
     JobTemplateNotFoundException,
     WorkflowJobTemplateNotFoundException,
 )
+from ansible_rulebook.shared_job_monitor import shared_job_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +89,42 @@ class JobTemplateRunner:
         self._set_slugs(value)
 
     async def close_session(self):
-        if self._session and not self._session.closed:
+        if self._session:
             await self._session.close()
 
     def _create_session(self):
         if self._session is None:
             limit = int(os.getenv("EDA_CONTROLLER_CONNECTION_LIMIT", "30"))
-            self._session = aiohttp.ClientSession(
+            max_retries = int(os.getenv("EDA_CONTROLLER_MAX_RETRIES", "5"))
+
+            # Configure retry options for transient errors
+            retry_options = ExponentialRetry(
+                attempts=max_retries,
+                statuses={
+                    429,
+                    502,
+                    503,
+                    504,
+                },  # Retry on rate limit and server errors
+                exceptions={aiohttp.ClientError},
+                start_timeout=0.5,  # Start with 500ms wait
+                max_timeout=30.0,  # Max wait of 30s between retries
+                factor=2.0,  # Double wait time each retry
+            )
+
+            # Create base session WITHOUT raise_for_status to allow retry client to handle it
+            base_session = aiohttp.ClientSession(
                 connector=aiohttp.TCPConnector(limit=limit),
                 headers=self._auth_headers(),
                 auth=self._basic_auth(),
-                raise_for_status=True,
+                raise_for_status=False,  # Let retry client handle status
+            )
+
+            # Wrap with retry client
+            self._session = RetryClient(
+                client_session=base_session,
+                retry_options=retry_options,
+                raise_for_status=True,  # Raise after retries exhausted
             )
 
     def _set_slugs(self, url):
@@ -114,15 +142,100 @@ class JobTemplateRunner:
             )
 
     async def _get_page(self, href_slug: str, params: dict) -> dict:
+        url = urljoin(self.host, href_slug)
         try:
-            url = urljoin(self.host, href_slug)
             self._create_session()
             async with self._session.get(
                 url, params=params, ssl=self._sslcontext
             ) as response:
-                return json.loads(await response.text())
+                response_text = await response.text()
+                try:
+                    result = json.loads(response_text)
+                    logger.debug(
+                        "Successfully retrieved page from %s (status: %d)",
+                        url,
+                        response.status,
+                    )
+                    return result
+                except JSONDecodeError as json_err:
+                    logger.error(
+                        "Failed to parse JSON response from %s. "
+                        "Response status: %d, Response body: %s",
+                        url,
+                        response.status,
+                        response_text[:500],  # Log first 500 chars
+                    )
+                    raise ControllerApiException(
+                        f"Invalid JSON response from controller: {json_err}"
+                    )
+        except aiohttp.ClientResponseError as e:
+            # This exception means all retries were exhausted
+            max_attempts = int(os.getenv("EDA_CONTROLLER_MAX_RETRIES", "5"))
+            logger.error(
+                "Failed to connect to controller at %s after %d attempts. "
+                "Status: %s, Message: %s",
+                url,
+                max_attempts,
+                e.status,
+                e.message,
+            )
+            raise ControllerApiException(str(e))
         except aiohttp.ClientError as e:
             logger.error(CLIENT_CONNECT_ERROR_STRING, str(e))
+            raise ControllerApiException(str(e))
+
+    async def _get_page_no_retry(self, href_slug: str, params: dict) -> dict:
+        """Get page without retry logic - used for polling operations.
+
+        For operations like job monitoring that happen frequently,
+        we don't want aggressive retries that could overload the controller.
+        Transient errors during polling will be handled by the next poll cycle.
+        """
+        url = urljoin(self.host, href_slug)
+        try:
+            self._create_session()
+            # Access the underlying session directly to bypass retry logic
+            base_session = self._session._client
+            async with base_session.get(
+                url, params=params, ssl=self._sslcontext
+            ) as response:
+                response.raise_for_status()
+                response_text = await response.text()
+                try:
+                    result = json.loads(response_text)
+                    logger.debug(
+                        "Successfully polled page from %s (status: %d)",
+                        url,
+                        response.status,
+                    )
+                    return result
+                except JSONDecodeError as json_err:
+                    logger.error(
+                        "Failed to parse JSON response from %s. "
+                        "Response status: %d, Response body: %s",
+                        url,
+                        response.status,
+                        response_text[:500],  # Log first 500 chars
+                    )
+                    raise ControllerApiException(
+                        f"Invalid JSON response from controller: {json_err}"
+                    )
+        except aiohttp.ClientResponseError as e:
+            # For polling, log at debug level - transient errors are expected
+            logger.debug(
+                "Polling error at %s (will retry on next poll cycle). "
+                "Status: %s, Message: %s",
+                url,
+                e.status,
+                e.message,
+            )
+            raise ControllerApiException(str(e))
+        except aiohttp.ClientError as e:
+            logger.debug(
+                "Polling connection error at %s (will retry on next poll cycle): %s",
+                url,
+                str(e),
+            )
             raise ControllerApiException(str(e))
 
     async def get_config(self) -> dict:
@@ -366,27 +479,49 @@ class JobTemplateRunner:
         )
         return await self.monitor_job(job_url)
 
-    async def monitor_job(self, url) -> dict:
+    async def monitor_job(self, url, use_shared_monitor: bool = True) -> dict:
         """Monitor a running job until it reaches a completion status.
 
         This method polls the controller for job status updates at regular
         intervals until the job reaches a terminal state (successful, failed,
         error, or canceled).
 
+        Note: By default uses shared batch monitoring to reduce API calls
+        when multiple jobs are being monitored concurrently. Set
+        use_shared_monitor=False for legacy individual polling behavior.
+
         Args:
             url: The job URL to monitor (can be a regular job or workflow job)
+            use_shared_monitor: If True, use SharedJobMonitor for efficient
+                batch polling (default: True). If False, use individual polling.
 
         Returns:
             dict: The final job status information when the job completes,
                 including status, artifacts, and other job metadata
         """
-        while True:
-            # fetch and process job status
-            json_body = await self._get_page(url, {})
-            if json_body["status"] in self.JOB_COMPLETION_STATUSES:
-                return json_body
+        if use_shared_monitor:
+            # Use shared monitor for efficient batch polling
+            future = await shared_job_monitor.register_job(url, self)
+            return await future
+        else:
+            # Legacy individual polling
+            while True:
+                try:
+                    # Use non-retry method for polling to prevent thundering herd
+                    json_body = await self._get_page_no_retry(url, {})
+                    if json_body["status"] in self.JOB_COMPLETION_STATUSES:
+                        return json_body
+                except ControllerApiException as e:
+                    # Transient error during polling - log and retry on next cycle
+                    logger.debug(
+                        "Transient error while polling job %s, "
+                        "will retry in %s seconds: %s",
+                        url,
+                        self.refresh_delay,
+                        str(e),
+                    )
 
-            await asyncio.sleep(self.refresh_delay)
+                await asyncio.sleep(self.refresh_delay)
 
     async def _launch(self, job_params: dict, url: str) -> dict:
         body = None
@@ -395,11 +530,41 @@ class JobTemplateRunner:
                 url,
                 json=job_params,
                 ssl=self._sslcontext,
-                raise_for_status=False,
             ) as post_response:
-                body = json.loads(await post_response.text())
-                post_response.raise_for_status()
+                response_text = await post_response.text()
+                try:
+                    body = json.loads(response_text)
+                    logger.debug(
+                        "Successfully launched job at %s (status: %d)",
+                        url,
+                        post_response.status,
+                    )
+                except JSONDecodeError as json_err:
+                    logger.error(
+                        "Failed to parse JSON response from %s. "
+                        "Response status: %d, Response body: %s",
+                        url,
+                        post_response.status,
+                        response_text[:500],  # Log first 500 chars
+                    )
+                    raise ControllerApiException(
+                        f"Invalid JSON response from controller: {json_err}"
+                    )
                 return body
+        except aiohttp.ClientResponseError as e:
+            # All retries exhausted
+            max_attempts = int(os.getenv("EDA_CONTROLLER_MAX_RETRIES", "5"))
+            logger.error(
+                "Failed to launch job at %s after %d attempts. "
+                "Status: %s, Message: %s",
+                url,
+                max_attempts,
+                e.status,
+                e.message,
+            )
+            if body:
+                logger.error("Response body: %s", body)
+            raise ControllerApiException(str(e))
         except aiohttp.ClientError as e:
             logger.error(CLIENT_CONNECT_ERROR_STRING, str(e))
             if body:
@@ -420,17 +585,28 @@ class JobTemplateRunner:
         self, href_slug: str, params: dict
     ) -> tuple[Optional[dict], bool]:
         body = None
+        url = urljoin(self.host, href_slug)
         try:
-            url = urljoin(self.host, href_slug)
             self._create_session()
             async with self._session.post(
                 url,
                 json=params,
                 ssl=self._sslcontext,
-                raise_for_status=False,
             ) as post_response:
-                body = json.loads(await post_response.text())
-                post_response.raise_for_status()
+                response_text = await post_response.text()
+                try:
+                    body = json.loads(response_text)
+                except JSONDecodeError as json_err:
+                    logger.error(
+                        "Failed to parse JSON response from %s. "
+                        "Response status: %d, Response body: %s",
+                        url,
+                        post_response.status,
+                        response_text[:500],  # Log first 500 chars
+                    )
+                    raise ControllerApiException(
+                        f"Invalid JSON response from controller: {json_err}"
+                    )
                 return body, False
         except aiohttp.ClientResponseError as e:
             # If the object got created by another process, do a retry
@@ -438,8 +614,15 @@ class JobTemplateRunner:
                 body
             ):
                 return None, True
+            # All retries exhausted for other errors
+            max_attempts = int(os.getenv("EDA_CONTROLLER_MAX_RETRIES", "5"))
             logger.error(
-                f"Client Response Error {e.status} message {e.message}"
+                "Failed to create object at %s after %d attempts. "
+                "Status: %s, Message: %s",
+                url,
+                max_attempts,
+                e.status,
+                e.message,
             )
             raise ControllerObjectCreateException(str(e))
         except aiohttp.ClientError as e:

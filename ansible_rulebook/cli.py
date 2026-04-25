@@ -265,6 +265,34 @@ def get_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "-m",
+        "--max-concurrent-actions",
+        help="For parallel execution strategy the maximum number of "
+        " concurrent actions. It can also be passed via the env var "
+        " EDA_MAX_CONCURRENT_ACTIONS",
+        default=os.environ.get("EDA_MAX_CONCURRENT_ACTIONS", "0"),
+        type=int,
+    )
+    parser.add_argument(
+        "--max-back-pressure-timeout",
+        help="When a back pressure is applied due to actions or reporting "
+        "objects being at capacity, how long should we wait before failing "
+        "Default is 3600 seconds. It can also "
+        "be passed via the env var EDA_MAX_BACK_PRESSURE_TIMEOUT",
+        default=os.environ.get("EDA_MAX_BACK_PRESSURE_TIMEOUT", "3600"),
+        type=int,
+    )
+    parser.add_argument(
+        "--max-reporting-queue-size",
+        help="For rule audits we send back reporting objects, this queue "
+        "size is to specify the backlog of reporting objects to be flushed "
+        "to the EDA Server default is 50. Increasing this may cause OOM "
+        "It can be passed via the env var EDA_MAX_REPORTING_QUEUE_SIZE",
+        default=os.environ.get("EDA_MAX_REPORTING_QUEUE_SIZE", "50"),
+        type=int,
+    )
+
     return parser
 
 
@@ -297,9 +325,19 @@ def setup_logging_and_display(args: argparse.Namespace) -> None:
 
 
 def update_settings(args: argparse.Namespace) -> None:
+    """Update settings from CLI arguments.
+
+    Since argparse already uses env vars as defaults, we directly assign
+    values from args to settings. CLI args take priority over env vars.
+
+    Note: Do NOT call settings.update_from_env() here - that's only for
+    when the websocket handler updates env vars later.
+    """
+    # Special case: identifier is not in ENV_MAP but can be set via CLI
     if args.id:
         settings.identifier = args.id
 
+    # Direct assignments - argparse already handled env var defaults
     if args.gc_after is not None:
         settings.gc_after = args.gc_after
 
@@ -309,6 +347,9 @@ def update_settings(args: argparse.Namespace) -> None:
     if args.persistence_id:
         settings.persistence_id = args.persistence_id
 
+    if args.max_concurrent_actions > 0:
+        settings.max_concurrent_actions = args.max_concurrent_actions
+
     settings.print_events = args.print_events
     settings.websocket_url = args.websocket_url
     settings.websocket_ssl_verify = args.websocket_ssl_verify
@@ -316,6 +357,10 @@ def update_settings(args: argparse.Namespace) -> None:
     settings.websocket_access_token = args.websocket_access_token
     settings.websocket_refresh_token = args.websocket_refresh_token
     settings.skip_audit_events = args.skip_audit_events
+    settings.max_back_pressure_timeout = args.max_back_pressure_timeout
+    settings.max_reporting_queue_size = args.max_reporting_queue_size
+
+    # Handle vault separately (not env-based)
     parse_vault_passwords(args)
 
 
