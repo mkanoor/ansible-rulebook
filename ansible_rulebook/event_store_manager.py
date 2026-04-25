@@ -51,9 +51,31 @@ def get_event_store() -> EventStore:
 
 def reset_event_store():
     """
-    Reset the event store (useful for testing).
+    Reset the event store (useful for testing and hot reload).
 
-    This clears the global reference, allowing a new store to be initialized.
+    This clears:
+    - The global active store reference
+    - MmapEventStore singleton instance
+    - SharedMemoryEventStore singleton instance
+
+    Safe to call even if stores haven't been initialized.
     """
     global _active_store
     _active_store = None
+
+    # Reset both singleton implementations
+    try:
+        from ansible_rulebook.mmap_event_store import MmapEventStore
+
+        MmapEventStore._instance = None
+    except ImportError:
+        pass
+
+    try:
+        from ansible_rulebook.shared_memory_event_store import (
+            SharedMemoryEventStore,
+        )
+
+        SharedMemoryEventStore._instance = None
+    except ImportError:
+        pass

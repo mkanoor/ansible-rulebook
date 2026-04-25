@@ -42,10 +42,27 @@ class PrintEvent:
             "events" if "events" in self.helper.control.variables else "event"
         )
 
+        # Convert LazyEventDict to regular dict for printing
+        event_data = self.helper.control.variables[var_name]
+        event_data = self._convert_lazy_to_dict(event_data)
+
         self.display.banner(
             "event",
-            self.helper.control.variables[var_name],
+            event_data,
             pretty=self.action_args.get("pretty", False),
         )
         sys.stdout.flush()
         await self.helper.send_default_status()
+
+    def _convert_lazy_to_dict(self, data):
+        """Recursively convert LazyEventDict objects to regular dicts."""
+        from ansible_rulebook.mmap_event_store import LazyEventDict
+
+        if isinstance(data, LazyEventDict):
+            return data.to_dict()
+        elif isinstance(data, dict):
+            return {k: self._convert_lazy_to_dict(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._convert_lazy_to_dict(item) for item in data]
+        else:
+            return data

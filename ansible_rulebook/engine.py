@@ -35,6 +35,7 @@ from ansible_rulebook.collection import (
 )
 from ansible_rulebook.event_store_manager import (
     get_event_store,
+    reset_event_store,
     set_event_store,
 )
 from ansible_rulebook.messages import Shutdown
@@ -527,6 +528,10 @@ async def run_rulesets(
 
         store.close()
         logger.info("%s event store closed successfully", backend_name)
+
+        # Reset singleton references for clean restart (e.g., hot reload)
+        reset_event_store()
+        logger.debug("Event store singleton references reset")
     except Exception as e:
         logger.debug(
             "Failed to cleanup event store (may not have been initialized): %s",

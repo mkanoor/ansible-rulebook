@@ -60,6 +60,8 @@ class Debug:
                 value = dpath.get(
                     self.helper.control.variables, key, separator="."
                 )
+                # Convert LazyEventDict to regular dict for printing
+                value = self._convert_lazy_to_dict(value)
                 self.display.banner("debug", f"{key}: {value}")
             except KeyError:
                 logger.error("Key %s not found in variable pool", key)
@@ -68,11 +70,15 @@ class Debug:
             args = asdict(self.helper.metadata)
             args.pop("persistent_info", None)
             project_data_file = self.helper.control.project_data_file
+            # Convert LazyEventDict to regular dict for printing
+            variables = self._convert_lazy_to_dict(
+                self.helper.control.variables
+            )
             args.update(
                 {
                     "inventory": self.helper.control.inventory,
                     "hosts": self.helper.control.hosts,
-                    "variables": self.helper.control.variables,
+                    "variables": variables,
                     "project_data_file": project_data_file,
                 }
             )
@@ -85,3 +91,16 @@ class Debug:
 
         sys.stdout.flush()
         await self.helper.send_default_status()
+
+    def _convert_lazy_to_dict(self, data):
+        """Recursively convert LazyEventDict objects to regular dicts."""
+        from ansible_rulebook.mmap_event_store import LazyEventDict
+
+        if isinstance(data, LazyEventDict):
+            return data.to_dict()
+        elif isinstance(data, dict):
+            return {k: self._convert_lazy_to_dict(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._convert_lazy_to_dict(item) for item in data]
+        else:
+            return data

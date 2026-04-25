@@ -23,6 +23,10 @@ import pytest
 from freezegun import freeze_time
 
 from ansible_rulebook.engine import run_rulesets, start_source
+from ansible_rulebook.event_filter.insert_meta_info import (
+    main as insert_meta_info,
+)
+from ansible_rulebook.event_store_manager import reset_event_store
 from ansible_rulebook.exception import (
     ControllerApiException,
     JobTemplateNotFoundException,
@@ -36,6 +40,21 @@ from ansible_rulebook.util import MASKED_STRING
 from .test_engine import get_queue_item, load_rulebook, validate_events
 
 DUMMY_UUID = "eb7de03f-6f8f-4943-b69e-3c90db346edf"
+
+
+def put_event_with_meta(queue, event):
+    """
+    Helper function to add metadata to an event using insert_meta_info
+    before putting it into the queue.
+
+    Args:
+        queue: The asyncio.Queue to put the event into
+        event: The event dictionary to add metadata to
+    """
+    event_with_meta = insert_meta_info(
+        event, source_name="eda.fake.source", source_type="fake"
+    )
+    queue.put_nowait(event_with_meta)
 
 
 class SourceTask:
@@ -73,6 +92,9 @@ RULEBOOK_NAMES = [
 @pytest.mark.parametrize("rulebook, args, use_persistence", RULEBOOK_NAMES)
 @pytest.mark.asyncio
 async def test_01_noop(rulebook, args, use_persistence):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     # Use a temporary directory that auto-cleans on exit
     variables = {}
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -84,7 +106,7 @@ async def test_01_noop(rulebook, args, use_persistence):
         ruleset_queues, event_log = load_rulebook(rulebook)
 
         queue = ruleset_queues[0][1]
-        queue.put_nowait(dict(i=1))
+        put_event_with_meta(queue, dict(i=1))
         queue.put_nowait(Shutdown())
 
         with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -103,7 +125,10 @@ async def test_01_noop(rulebook, args, use_persistence):
         assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
         assert event["status"] == "successful"
         assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-        assert event["matching_events"] == {"m": {"i": 1}}, "3"
+        # Pop meta from matching_events before asserting
+        matching_events = event["matching_events"]
+        matching_events["m"].pop("meta", None)
+        assert matching_events == {"m": {"i": 1}}, "3"
         event = event_log.get_nowait()
         assert event["type"] == "Shutdown", "7"
         assert event_log.empty()
@@ -112,10 +137,13 @@ async def test_01_noop(rulebook, args, use_persistence):
 
 @pytest.mark.asyncio
 async def test_02_debug():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/02_debug.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -133,7 +161,10 @@ async def test_02_debug():
     assert event["status"] == "successful"
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m": {"i": 1}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -141,10 +172,13 @@ async def test_02_debug():
 
 @pytest.mark.asyncio
 async def test_03_print_event():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/03_print_event.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -162,7 +196,10 @@ async def test_03_print_event():
     assert event["status"] == "successful"
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m": {"i": 1}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -170,10 +207,13 @@ async def test_03_print_event():
 
 @pytest.mark.asyncio
 async def test_04_set_fact():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/04_set_fact.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -191,7 +231,10 @@ async def test_04_set_fact():
     assert event["status"] == "successful"
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m": {"i": 1}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Action", "3"
     assert event["action"] == "print_event", "4"
@@ -202,10 +245,13 @@ async def test_04_set_fact():
 
 @pytest.mark.asyncio
 async def test_05_post_event():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/05_post_event.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -223,7 +269,10 @@ async def test_05_post_event():
     assert event["status"] == "successful"
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m": {"i": 1}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Action", "3"
     assert event["action"] == "print_event", "4"
@@ -234,10 +283,13 @@ async def test_05_post_event():
 
 @pytest.mark.asyncio
 async def test_06_retract_fact():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/06_retract_fact.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -255,7 +307,10 @@ async def test_06_retract_fact():
     assert event["status"] == "successful"
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m": {"i": 1}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Action", "3"
     assert event["action"] == "retract_fact", "4"
@@ -269,10 +324,13 @@ async def test_06_retract_fact():
 
 @pytest.mark.asyncio
 async def test_07_and():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/07_and.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(nested=dict(i=1, j=1)))
+    put_event_with_meta(queue, dict(nested=dict(i=1, j=1)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -285,7 +343,10 @@ async def test_07_and():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"nested": {"i": 1, "j": 1}}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"nested": {"i": 1, "j": 1}}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -293,10 +354,13 @@ async def test_07_and():
 
 @pytest.mark.asyncio
 async def test_08_or():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/08_or.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(nested=dict(i=1, j=1)))
+    put_event_with_meta(queue, dict(nested=dict(i=1, j=1)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -309,7 +373,10 @@ async def test_08_or():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"nested": {"i": 1, "j": 1}}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"nested": {"i": 1, "j": 1}}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -317,10 +384,13 @@ async def test_08_or():
 
 @pytest.mark.asyncio
 async def test_09_gt():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/09_gt.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=3))
+    put_event_with_meta(queue, dict(i=3))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -333,7 +403,10 @@ async def test_09_gt():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"i": 3}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 3}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -341,10 +414,13 @@ async def test_09_gt():
 
 @pytest.mark.asyncio
 async def test_10_lt():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/10_lt.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -357,7 +433,10 @@ async def test_10_lt():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"i": 1}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -365,10 +444,13 @@ async def test_10_lt():
 
 @pytest.mark.asyncio
 async def test_11_le():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/11_le.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=2))
+    put_event_with_meta(queue, dict(i=2))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -381,7 +463,10 @@ async def test_11_le():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"i": 2}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 2}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -389,10 +474,13 @@ async def test_11_le():
 
 @pytest.mark.asyncio
 async def test_12_ge():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/12_ge.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=2))
+    put_event_with_meta(queue, dict(i=2))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -405,7 +493,10 @@ async def test_12_ge():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"i": 2}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 2}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -413,10 +504,13 @@ async def test_12_ge():
 
 @pytest.mark.asyncio
 async def test_13_add():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/13_add.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(nested=dict(i=2, j=1)))
+    put_event_with_meta(queue, dict(nested=dict(i=2, j=1)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -429,7 +523,10 @@ async def test_13_add():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"nested": {"i": 2, "j": 1}}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"nested": {"i": 2, "j": 1}}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -437,10 +534,13 @@ async def test_13_add():
 
 @pytest.mark.asyncio
 async def test_14_sub():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/14_sub.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(nested=dict(i=1, j=2)))
+    put_event_with_meta(queue, dict(nested=dict(i=1, j=2)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -453,7 +553,10 @@ async def test_14_sub():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m": {"nested": {"i": 1, "j": 2}}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"nested": {"i": 1, "j": 2}}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -461,13 +564,16 @@ async def test_14_sub():
 
 @pytest.mark.asyncio
 async def test_15_multiple_events_all():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/15_multiple_events_all.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(nested=dict(i=1, j=0)))
-    queue.put_nowait(dict(nested=dict(i=0, j=1)))
+    put_event_with_meta(queue, dict(nested=dict(i=1, j=0)))
+    put_event_with_meta(queue, dict(nested=dict(i=0, j=1)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -480,7 +586,11 @@ async def test_15_multiple_events_all():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m_0"].pop("meta", None)
+    matching_events["m_1"].pop("meta", None)
+    assert matching_events == {
         "m_0": {"nested": {"i": 1, "j": 0}},
         "m_1": {"nested": {"i": 0, "j": 1}},
     }, "3"
@@ -491,12 +601,15 @@ async def test_15_multiple_events_all():
 
 @pytest.mark.asyncio
 async def test_16_multiple_events_any():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/16_multiple_events_any.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(nested=dict(i=1, j=0)))
+    put_event_with_meta(queue, dict(nested=dict(i=1, j=0)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -509,7 +622,10 @@ async def test_16_multiple_events_any():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m_0": {"nested": {"i": 1, "j": 0}}}
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m_0"].pop("meta", None)
+    assert matching_events == {"m_0": {"nested": {"i": 1, "j": 0}}}
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -517,13 +633,16 @@ async def test_16_multiple_events_any():
 
 @pytest.mark.asyncio
 async def test_17_multiple_sources_any():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/17_multiple_sources_any.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(range2=dict(i=1)))
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(queue, dict(range2=dict(i=1)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -536,11 +655,17 @@ async def test_17_multiple_sources_any():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {"m_0": {"i": 1}}
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m_0"].pop("meta", None)
+    assert matching_events == {"m_0": {"i": 1}}
     event = event_log.get_nowait()
     assert event["type"] == "Action", "4"
     assert event["action"] == "debug", "5"
-    assert event["matching_events"] == {"m_1": {"range2": {"i": 1}}}, "6"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m_1"].pop("meta", None)
+    assert matching_events == {"m_1": {"range2": {"i": 1}}}, "6"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "8"
     assert event_log.empty()
@@ -548,13 +673,16 @@ async def test_17_multiple_sources_any():
 
 @pytest.mark.asyncio
 async def test_18_multiple_sources_all():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/18_multiple_sources_all.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(range2=dict(i=1)))
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(queue, dict(range2=dict(i=1)))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -567,7 +695,11 @@ async def test_18_multiple_sources_all():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m_0"].pop("meta", None)
+    matching_events["m_1"].pop("meta", None)
+    assert matching_events == {
         "m_0": {"i": 1},
         "m_1": {"range2": {"i": 1}},
     }, "3"
@@ -578,11 +710,16 @@ async def test_18_multiple_sources_all():
 
 @pytest.mark.asyncio
 async def test_19_is_defined():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/19_is_defined.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(payload=dict(key1="value1", key2=dict(name="fred"))))
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(
+        queue, dict(payload=dict(key1="value1", key2=dict(name="fred")))
+    )
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -595,7 +732,10 @@ async def test_19_is_defined():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "set_fact", "2"
-    assert event["matching_events"] == {"m": {"i": 1}}
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}
     event = event_log.get_nowait()
     assert event["type"] == "Action", "3"
     assert event["action"] in ["debug", "print_event"], "4"
@@ -609,10 +749,13 @@ async def test_19_is_defined():
 
 @pytest.mark.asyncio
 async def test_20_is_not_defined():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/20_is_not_defined.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -625,7 +768,10 @@ async def test_20_is_not_defined():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "set_fact", "2"
-    assert event["matching_events"] == {"m": {"i": 1}}
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}
     event = event_log.get_nowait()
     assert event["type"] == "Action", "3"
     assert event["action"] == "retract_fact", "4"
@@ -655,10 +801,13 @@ PLAYBOOK_RULES = [
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rule, ansible_events", PLAYBOOK_RULES)
 async def test_21_run_playbook(rule, ansible_events):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(rule)
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -685,7 +834,10 @@ async def test_21_run_playbook(rule, ansible_events):
     assert event["action_uuid"] == DUMMY_UUID
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m": {"i": 1}}
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "8"
     assert event_log.empty()
@@ -693,11 +845,14 @@ async def test_21_run_playbook(rule, ansible_events):
 
 @pytest.mark.asyncio
 async def test_23_nested_data():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/23_nested_data.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(root=dict(nested=dict(i=0))))
-    queue.put_nowait(dict(root=dict(nested=dict(i=1))))
+    put_event_with_meta(queue, dict(root=dict(nested=dict(i=0))))
+    put_event_with_meta(queue, dict(root=dict(nested=dict(i=1))))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -709,7 +864,10 @@ async def test_23_nested_data():
 
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
-    assert event["matching_events"] == {"m": {"root": {"nested": {"i": 1}}}}
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"root": {"nested": {"i": 1}}}}
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "2"
     assert event_log.empty()
@@ -717,6 +875,9 @@ async def test_23_nested_data():
 
 @pytest.mark.asyncio
 async def test_24_max_attributes():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/24_max_attributes.yml")
 
     with open("examples/replays/24_max_attributes/00.json") as f:
@@ -742,6 +903,9 @@ async def test_24_max_attributes():
 
 @pytest.mark.asyncio
 async def test_25_max_attributes_nested():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/25_max_attributes_nested.yml"
     )
@@ -769,11 +933,14 @@ async def test_25_max_attributes_nested():
 
 @pytest.mark.asyncio
 async def test_26_print_events():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/26_print_events.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(i=2))
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(queue, dict(i=2))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -790,7 +957,11 @@ async def test_26_print_events():
     assert event["action_uuid"] == DUMMY_UUID
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m_0": {"i": 1}, "m_1": {"i": 2}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m_0"].pop("meta", None)
+    matching_events["m_1"].pop("meta", None)
+    assert matching_events == {"m_0": {"i": 1}, "m_1": {"i": 2}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Shutdown", "7"
     assert event_log.empty()
@@ -798,6 +969,9 @@ async def test_26_print_events():
 
 @pytest.mark.asyncio
 async def test_27_var_root():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/27_var_root.yml")
     queue = ruleset_queues[0][1]
     rs = ruleset_queues[0][0]
@@ -813,7 +987,11 @@ async def test_27_var_root():
             event = event_log.get_nowait()
             assert event["type"] == "Action", "1"
             assert event["action"] == "print_event", "2"
-            assert event["matching_events"] == {
+            # Pop meta from matching_events before asserting
+            matching_events = event["matching_events"]
+            matching_events["webhook"].pop("meta", None)
+            matching_events["kafka"].pop("meta", None)
+            assert matching_events == {
                 "webhook": {
                     "url": "http://www.example.com",
                     "action": "merge",
@@ -827,13 +1005,16 @@ async def test_27_var_root():
 
 @pytest.mark.asyncio
 async def test_28_right_side_condition_template():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/28_right_side_condition_template.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait({"i": 1})
-    queue.put_nowait({"i": 2})
+    put_event_with_meta(queue, {"i": 1})
+    put_event_with_meta(queue, {"i": 2})
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -846,7 +1027,10 @@ async def test_28_right_side_condition_template():
     event = event_log.get_nowait()
     assert event["type"] == "Action", "1"
     assert event["action"] == "debug", "2"
-    assert event["matching_events"] == {
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {
         "m": {"i": 2},
     }, "3"
     event = event_log.get_nowait()
@@ -856,10 +1040,13 @@ async def test_28_right_side_condition_template():
 
 @pytest.mark.asyncio
 async def test_29_run_module():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/29_run_module.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1, meta=dict(hosts="localhost")))
+    put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost")))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -881,9 +1068,13 @@ async def test_29_run_module():
     assert event["action_uuid"] == DUMMY_UUID
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {
-        "m": {"i": 1, "meta": {"hosts": "localhost"}}
-    }
+    # Pop added meta fields from matching_events before asserting
+    matching_events = event["matching_events"]
+    if "meta" in matching_events["m"]:
+        matching_events["m"]["meta"].pop("source", None)
+        matching_events["m"]["meta"].pop("received_at", None)
+        matching_events["m"]["meta"].pop("uuid", None)
+    assert matching_events == {"m": {"i": 1, "meta": {"hosts": "localhost"}}}
     assert event["rc"] == 0, "2.1"
     assert event["status"] == "successful", "2.2"
     event = event_log.get_nowait()
@@ -896,12 +1087,15 @@ async def test_29_run_module():
 
 @pytest.mark.asyncio
 async def test_30_run_module_missing():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/30_run_module_missing.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1, meta=dict(hosts="localhost")))
+    put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost")))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -929,12 +1123,15 @@ async def test_30_run_module_missing():
 
 @pytest.mark.asyncio
 async def test_31_run_module_missing_args():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/31_run_module_missing_args.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1, meta=dict(hosts="localhost")))
+    put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost")))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -962,12 +1159,15 @@ async def test_31_run_module_missing_args():
 
 @pytest.mark.asyncio
 async def test_32_run_module_fail():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/32_run_module_fail.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1, meta=dict(hosts="localhost")))
+    put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost")))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -995,16 +1195,19 @@ async def test_32_run_module_fail():
 
 @pytest.mark.asyncio
 async def test_35_multiple_rulesets_1_fired():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/35_multiple_rulesets_1_fired.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1, meta=dict(hosts="localhost")))
+    put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost")))
     queue.put_nowait(Shutdown())
 
     queue = ruleset_queues[1][1]
-    queue.put_nowait(dict(i=1, meta=dict(hosts="localhost")))
+    put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost")))
 
     queue.put_nowait(Shutdown())
 
@@ -1027,6 +1230,9 @@ async def test_35_multiple_rulesets_1_fired():
 
 @pytest.mark.asyncio
 async def test_36_multiple_rulesets_both_fired():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/36_multiple_rulesets_both_fired.yml"
     )
@@ -1059,10 +1265,13 @@ async def test_36_multiple_rulesets_both_fired():
 
 @pytest.mark.asyncio
 async def test_37_hosts_facts():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/37_hosts_facts.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -1082,6 +1291,9 @@ async def test_37_hosts_facts():
 
 @pytest.mark.asyncio
 async def test_38_shutdown_action():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/38_shutdown.yml")
 
     queue = ruleset_queues[0][1]
@@ -1112,6 +1324,9 @@ async def test_38_shutdown_action():
 
 @pytest.mark.asyncio
 async def test_40_in():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/40_in.yml")
     queue = ruleset_queues[0][1]
     rs = ruleset_queues[0][0]
@@ -1134,6 +1349,9 @@ async def test_40_in():
 
 @pytest.mark.asyncio
 async def test_41_not_in():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/41_not_in.yml")
     queue = ruleset_queues[0][1]
     rs = ruleset_queues[0][0]
@@ -1156,6 +1374,9 @@ async def test_41_not_in():
 
 @pytest.mark.asyncio
 async def test_42_contains():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/42_contains.yml")
     queue = ruleset_queues[0][1]
     rs = ruleset_queues[0][0]
@@ -1178,6 +1399,9 @@ async def test_42_contains():
 
 @pytest.mark.asyncio
 async def test_43_not_contains():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/43_not_contains.yml")
 
     queue = ruleset_queues[0][1]
@@ -1201,6 +1425,9 @@ async def test_43_not_contains():
 
 @pytest.mark.asyncio
 async def test_44_in_and():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/44_in_and.yml")
     queue = ruleset_queues[0][1]
     rs = ruleset_queues[0][0]
@@ -1223,6 +1450,9 @@ async def test_44_in_and():
 
 @pytest.mark.asyncio
 async def test_45_in_or():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/45_in_or.yml")
 
     queue = ruleset_queues[0][1]
@@ -1249,6 +1479,9 @@ async def test_45_in_or():
 
 @pytest.mark.asyncio
 async def test_47_generic_plugin():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/47_generic_plugin.yml")
     queue = ruleset_queues[0][1]
     rs = ruleset_queues[0][0]
@@ -1272,6 +1505,9 @@ async def test_47_generic_plugin():
 
 @pytest.mark.asyncio
 async def test_48_echo():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/48_echo.yml")
 
     queue = ruleset_queues[0][1]
@@ -1296,6 +1532,9 @@ async def test_48_echo():
 @freeze_time("2023-03-23 11:11:11")
 @pytest.mark.asyncio
 async def test_49_float():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/49_float.yml")
     queue = ruleset_queues[0][1]
     rs = ruleset_queues[0][0]
@@ -1318,19 +1557,23 @@ async def test_49_float():
             event = event_log.get_nowait()
             assert event["type"] == "Action", "1"
             assert event["action"] == "debug", "1"
-            assert event["matching_events"] == {
-                "m": {"pi": 3.14159, "meta": meta}
-            }, "3"
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {"m": {"pi": 3.14159, "meta": meta}}, "3"
             event = event_log.get_nowait()
             assert event["type"] == "Action", "3"
             assert event["action"] == "debug", "4"
-            assert event["matching_events"] == {
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {
                 "m": {"mass": 5.97219, "meta": meta}
             }, "5"
             event = event_log.get_nowait()
             assert event["type"] == "Action", "6"
             assert event["action"] == "debug", "7"
-            assert event["matching_events"] == {
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {
                 "m": {"radius": 300.42, "meta": meta}
             }, "8"
             event = event_log.get_nowait()
@@ -1340,6 +1583,9 @@ async def test_49_float():
 @freeze_time("2023-03-23 11:11:11")
 @pytest.mark.asyncio
 async def test_50_negation():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/50_negation.yml")
 
     queue = ruleset_queues[0][1]
@@ -1363,39 +1609,42 @@ async def test_50_negation():
             event = event_log.get_nowait()
             assert event["type"] == "Action", "1"
             assert event["action"] == "print_event", "1"
-            assert event["matching_events"] == {
-                "m": {"b": False, "meta": meta}
-            }, "1"
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {"m": {"b": False, "meta": meta}}, "1"
             event = event_log.get_nowait()
             assert event["type"] == "Action", "3"
             assert event["action"] == "print_event", "3"
-            assert event["matching_events"] == {
-                "m": {"bt": True, "meta": meta}
-            }, "3"
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {"m": {"bt": True, "meta": meta}}, "3"
             event = event_log.get_nowait()
             assert event["type"] == "Action", "5"
             assert event["action"] == "print_event", "5"
-            assert event["matching_events"] == {
-                "m": {"i": 10, "meta": meta}
-            }, "5"
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {"m": {"i": 10, "meta": meta}}, "5"
             event = event_log.get_nowait()
             assert event["type"] == "Action", "6"
             assert event["action"] == "print_event", "6"
-            assert event["matching_events"] == {
-                "m": {"msg": "Fred", "meta": meta}
-            }, "6"
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {"m": {"msg": "Fred", "meta": meta}}, "6"
             event = event_log.get_nowait()
             assert event["type"] == "Action", "7"
             assert event["action"] == "print_event", "7"
-            assert event["matching_events"] == {
-                "m": {"j": 9, "meta": meta}
-            }, "7"
+            # This test expects meta to be present, so don't pop it
+            matching_events = event["matching_events"]
+            assert matching_events == {"m": {"j": 9, "meta": meta}}, "7"
             event = event_log.get_nowait()
             assert event["type"] == "Shutdown", "8"
 
 
 @pytest.mark.asyncio
 async def test_51_vars_namespace():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/51_vars_namespace.yml")
 
     queue = ruleset_queues[0][1]
@@ -1440,6 +1689,9 @@ async def test_51_vars_namespace():
 
 @pytest.mark.asyncio
 async def test_51_vars_namespace_missing_key():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/51_vars_namespace.yml")
 
     queue = ruleset_queues[0][1]
@@ -1473,6 +1725,9 @@ async def test_51_vars_namespace_missing_key():
 
 @pytest.mark.asyncio
 async def test_52_once_within():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/52_once_within.yml")
 
     queue = ruleset_queues[0][1]
@@ -1498,6 +1753,9 @@ async def test_52_once_within():
 
 @pytest.mark.asyncio
 async def test_53_once_within_multiple_hosts():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/53_once_within_multiple_hosts.yml"
     )
@@ -1527,6 +1785,9 @@ async def test_53_once_within_multiple_hosts():
 @pytest.mark.temporal
 @pytest.mark.long_run
 async def test_54_time_window():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/54_time_window.yml")
 
     queue = ruleset_queues[0][1]
@@ -1563,6 +1824,9 @@ async def test_54_time_window():
 @pytest.mark.temporal
 @pytest.mark.long_run
 async def test_55_not_all():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/55_not_all.yml")
 
     queue = ruleset_queues[0][1]
@@ -1590,6 +1854,9 @@ async def test_55_not_all():
 @pytest.mark.temporal
 @pytest.mark.long_run
 async def test_56_once_after():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/56_once_after.yml")
 
     queue = ruleset_queues[0][1]
@@ -1616,6 +1883,9 @@ async def test_56_once_after():
 @pytest.mark.temporal
 @pytest.mark.long_run
 async def test_57_once_after_multiple():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/57_once_after_multi.yml"
     )
@@ -1638,6 +1908,9 @@ async def test_57_once_after_multiple():
 
 @pytest.mark.asyncio
 async def test_58_string_search():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/58_string_search.yml")
 
     queue = ruleset_queues[0][1]
@@ -1666,6 +1939,9 @@ async def test_58_string_search():
 
 @pytest.mark.asyncio
 async def test_59_multiple_actions():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/59_multiple_actions.yml"
     )
@@ -1695,6 +1971,9 @@ async def test_59_multiple_actions():
 
 @pytest.mark.asyncio
 async def test_60_json_filter():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/60_json_filter.yml")
 
     queue = ruleset_queues[0][1]
@@ -1719,6 +1998,9 @@ async def test_60_json_filter():
 
 @pytest.mark.asyncio
 async def test_61_select_1():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/61_select_1.yml")
 
     queue = ruleset_queues[0][1]
@@ -1743,6 +2025,9 @@ async def test_61_select_1():
 
 @pytest.mark.asyncio
 async def test_62_select_2():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/62_select_2.yml")
 
     queue = ruleset_queues[0][1]
@@ -1769,6 +2054,9 @@ async def test_62_select_2():
 
 @pytest.mark.asyncio
 async def test_63_selectattr_1():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/63_selectattr_1.yml")
 
     queue = ruleset_queues[0][1]
@@ -1794,6 +2082,9 @@ async def test_63_selectattr_1():
 
 @pytest.mark.asyncio
 async def test_64_selectattr_2():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/64_selectattr_2.yml")
 
     queue = ruleset_queues[0][1]
@@ -1818,6 +2109,9 @@ async def test_64_selectattr_2():
 
 @pytest.mark.asyncio
 async def test_65_selectattr_3():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/65_selectattr_3.yml")
 
     queue = ruleset_queues[0][1]
@@ -1842,6 +2136,9 @@ async def test_65_selectattr_3():
 
 @pytest.mark.asyncio
 async def test_66_sleepy_playbook():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/66_sleepy_playbook.yml"
     )
@@ -1876,6 +2173,9 @@ async def test_66_sleepy_playbook():
 
 @pytest.mark.asyncio
 async def test_67_shutdown_now():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/67_shutdown_now.yml")
 
     with SourceTask(
@@ -1908,6 +2208,9 @@ async def test_67_shutdown_now():
 
 @pytest.mark.asyncio
 async def test_68_disabled_rule():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/68_disabled_rule.yml")
 
     queue = ruleset_queues[0][1]
@@ -1932,6 +2235,9 @@ async def test_68_disabled_rule():
 
 @pytest.mark.asyncio
 async def test_69_enhanced_debug():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/69_enhanced_debug.yml")
 
     queue = ruleset_queues[0][1]
@@ -1959,6 +2265,9 @@ async def test_69_enhanced_debug():
 
 @pytest.mark.asyncio
 async def test_70_null():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/70_null.yml")
 
     queue = ruleset_queues[0][1]
@@ -1985,6 +2294,9 @@ async def test_70_null():
 
 @pytest.mark.asyncio
 async def test_72_set_fact_with_type():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/72_set_fact_with_type.yml",
     )
@@ -2016,6 +2328,9 @@ async def test_72_set_fact_with_type():
 
 @pytest.mark.asyncio
 async def test_73_mix_and_match_list():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/73_mix_and_match_list.yml"
     )
@@ -2046,6 +2361,9 @@ async def test_73_mix_and_match_list():
 
 @pytest.mark.asyncio
 async def test_74_self_referential():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/74_self_referential.yml"
     )
@@ -2072,6 +2390,9 @@ async def test_74_self_referential():
 
 @pytest.mark.asyncio
 async def test_75_all_conditions():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/75_all_conditions.yml")
 
     queue = ruleset_queues[0][1]
@@ -2096,6 +2417,9 @@ async def test_75_all_conditions():
 
 @pytest.mark.asyncio
 async def test_76_all_conditions():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/76_all_conditions.yml")
 
     queue = ruleset_queues[0][1]
@@ -2121,6 +2445,9 @@ async def test_76_all_conditions():
 
 @pytest.mark.asyncio
 async def test_46_job_template():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/46_job_template.yml")
 
     queue = ruleset_queues[0][1]
@@ -2167,6 +2494,9 @@ JOB_TEMPLATE_ERRORS = [
 @pytest.mark.parametrize("err_msg,err", JOB_TEMPLATE_ERRORS)
 @pytest.mark.asyncio
 async def test_46_job_template_exception(err_msg, err):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/46_job_template.yml")
 
     queue = ruleset_queues[0][1]
@@ -2210,6 +2540,9 @@ async def test_46_job_template_exception(err_msg, err):
 
 @pytest.mark.asyncio
 async def test_77_default_events_ttl():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/77_default_events_ttl.yml"
     )
@@ -2236,12 +2569,15 @@ async def test_77_default_events_ttl():
 
 @pytest.mark.asyncio
 async def test_78_complete_retract_fact():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/78_complete_retract_fact.yml"
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=1))
+    put_event_with_meta(queue, dict(i=1))
     queue.put_nowait(Shutdown())
 
     with patch("uuid.uuid4", return_value=DUMMY_UUID):
@@ -2259,7 +2595,10 @@ async def test_78_complete_retract_fact():
     assert event["status"] == "successful"
     assert event["ruleset_uuid"] == ruleset_queues[0][0].uuid
     assert event["rule_uuid"] == ruleset_queues[0][0].rules[0].uuid
-    assert event["matching_events"] == {"m": {"i": 1}}, "3"
+    # Pop meta from matching_events before asserting
+    matching_events = event["matching_events"]
+    matching_events["m"].pop("meta", None)
+    assert matching_events == {"m": {"i": 1}}, "3"
     event = event_log.get_nowait()
     assert event["type"] == "Action", "3"
     assert event["action"] == "retract_fact", "4"
@@ -2285,6 +2624,9 @@ WORKFLOW_TEMPLATE_ERRORS = [
 @pytest.mark.parametrize("err_msg,err", WORKFLOW_TEMPLATE_ERRORS)
 @pytest.mark.asyncio
 async def test_79_workflow_job_template_exception(err_msg, err):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/79_workflow_template.yml"
     )
@@ -2331,6 +2673,9 @@ async def test_79_workflow_job_template_exception(err_msg, err):
 @pytest.mark.jira("AAP-9829")
 @pytest.mark.asyncio
 async def test_79_workflow_job_template():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/79_workflow_template.yml"
     )
@@ -2370,6 +2715,9 @@ async def test_79_workflow_job_template():
 
 @pytest.mark.asyncio
 async def test_80_match_multiple_rules():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/80_match_multiple_rules.yml"
     )
@@ -2397,6 +2745,9 @@ async def test_80_match_multiple_rules():
 
 @pytest.mark.asyncio
 async def test_81_match_single_rule():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/81_match_single_rule.yml"
     )
@@ -2424,6 +2775,9 @@ async def test_81_match_single_rule():
 @pytest.mark.jira("AAP-16038")
 @pytest.mark.asyncio
 async def test_82_non_alpha_keys():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/82_non_alpha_keys.yml")
 
     queue = ruleset_queues[0][1]
@@ -2450,6 +2804,9 @@ async def test_82_non_alpha_keys():
 
 @pytest.mark.asyncio
 async def test_83_boolean_true():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/83_boolean_true.yml")
 
     queue = ruleset_queues[0][1]
@@ -2556,6 +2913,9 @@ INCLUDE_EVENTS_RUN = [
 async def test_include_events(
     location, monitor, rulebook, action_type, job_url, expected_keys
 ):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(rulebook)
 
     queue = ruleset_queues[0][1]
@@ -2595,6 +2955,9 @@ async def test_include_events(
 
 @pytest.mark.asyncio
 async def test_89_source_error_with_msg(caplog):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/89_source_error_with_msg.yml"
     )
@@ -2617,6 +2980,9 @@ async def test_89_source_error_with_msg(caplog):
 
 @pytest.mark.asyncio
 async def test_90_source_error_without_msg(caplog):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/90_source_error_without_msg.yml"
     )
@@ -2639,6 +3005,9 @@ async def test_90_source_error_without_msg(caplog):
 
 @pytest.mark.asyncio
 async def test_91_debug_mask_sensitive_variables(caplog):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     caplog.set_level(logging.DEBUG)
     ruleset_queues, event_log = load_rulebook(
         "examples/91_mask_senstive_variables.yml"
@@ -2674,6 +3043,9 @@ async def test_91_debug_mask_sensitive_variables(caplog):
 
 @pytest.mark.asyncio
 async def test_93_event_splitter():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/93_event_splitter.yml")
 
     queue = ruleset_queues[0][1]
@@ -2756,6 +3128,9 @@ RULEBOOK_DATA = [
 @pytest.mark.parametrize("response, my_vars, expected_order", RULEBOOK_DATA)
 @pytest.mark.asyncio
 async def test_96_job_template_with_lock(response, my_vars, expected_order):
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook(
         "examples/96_job_template_with_lock.yml"
     )
@@ -2806,6 +3181,9 @@ async def test_96_job_template_with_lock(response, my_vars, expected_order):
 @pytest.mark.jira("AAPRFE-2108")
 @pytest.mark.asyncio
 async def test_97_jinja_filters():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/97_jinja_filters.yml")
 
     queue = ruleset_queues[0][1]
@@ -2833,6 +3211,9 @@ async def test_97_jinja_filters():
 @pytest.mark.jira("AAPRFE-2108")
 @pytest.mark.asyncio
 async def test_98_jinja_files():
+    # Reset singletons at the start to ensure clean state
+    reset_event_store()
+
     ruleset_queues, event_log = load_rulebook("examples/98_jinja_files.yml")
 
     queue = ruleset_queues[0][1]

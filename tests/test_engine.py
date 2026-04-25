@@ -24,6 +24,9 @@ from freezegun import freeze_time
 from jsonschema.exceptions import ValidationError
 
 from ansible_rulebook.engine import run_rulesets, start_source
+from ansible_rulebook.event_filter.insert_meta_info import (
+    main as insert_meta_info,
+)
 from ansible_rulebook.exception import (
     RulenameDuplicateException,
     SourceFilterNotFoundException,
@@ -61,6 +64,27 @@ def load_rulebook(rules_file):
     event_log = asyncio.Queue()
 
     return ruleset_queues, event_log
+
+
+def put_event_with_meta(queue, event):
+    """
+    Helper function to add metadata to an event using insert_meta_info
+    before putting it into the queue.
+
+    Args:
+        queue: The asyncio.Queue to put the event into
+        event: The event dictionary to add metadata to
+    """
+    # Don't add metadata to truly empty events (preserves EmptyEvent behavior)
+    if not event or (
+        len(event) == 1 and "meta" in event and not event["meta"]
+    ):
+        queue.put_nowait(event)
+    else:
+        event_with_meta = insert_meta_info(
+            event, source_name="eda.fake.source", source_type="fake"
+        )
+        queue.put_nowait(event_with_meta)
 
 
 async def get_queue_item(queue, timeout=0.5, times=1):
@@ -267,12 +291,12 @@ async def test_run_rulesets():
     ruleset_queues, event_log = load_rulebook("rules/test_rules.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict())
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(i=2))
-    queue.put_nowait(dict(i=3))
-    queue.put_nowait(dict(i=4))
-    queue.put_nowait(dict(i=5))
+    put_event_with_meta(queue, dict())
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(queue, dict(i=2))
+    put_event_with_meta(queue, dict(i=3))
+    put_event_with_meta(queue, dict(i=4))
+    put_event_with_meta(queue, dict(i=5))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -343,9 +367,9 @@ async def test_run_rules_simple():
     ruleset_queues, event_log = load_rulebook("rules/test_simple.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=0))
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(i=2))
+    put_event_with_meta(queue, dict(i=0))
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(queue, dict(i=2))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -377,12 +401,12 @@ async def test_run_multiple_hosts():
     )
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=0))
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(i=2))
-    queue.put_nowait(dict(i=3))
-    queue.put_nowait(dict(i=4))
-    queue.put_nowait(dict(i=5))
+    put_event_with_meta(queue, dict(i=0))
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(queue, dict(i=2))
+    put_event_with_meta(queue, dict(i=3))
+    put_event_with_meta(queue, dict(i=4))
+    put_event_with_meta(queue, dict(i=5))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -461,9 +485,9 @@ async def test_filters():
     ruleset_queues, event_log = load_rulebook("rules/test_filters.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict(i=0))
-    queue.put_nowait(dict(i=1))
-    queue.put_nowait(dict(i=2))
+    put_event_with_meta(queue, dict(i=0))
+    put_event_with_meta(queue, dict(i=1))
+    put_event_with_meta(queue, dict(i=2))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -493,12 +517,12 @@ async def test_run_rulesets_on_hosts():
     ruleset_queues, event_log = load_rulebook("rules/test_host_rules.yml")
 
     queue = ruleset_queues[0][1]
-    queue.put_nowait(dict())
-    queue.put_nowait(dict(i=1, meta=dict(hosts="localhost0")))
-    queue.put_nowait(dict(i=2, meta=dict(hosts="localhost0")))
-    queue.put_nowait(dict(i=3, meta=dict(hosts="localhost0")))
-    queue.put_nowait(dict(i=4, meta=dict(hosts="localhost0")))
-    queue.put_nowait(dict(i=5, meta=dict(hosts="localhost0")))
+    put_event_with_meta(queue, dict())
+    put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost0")))
+    put_event_with_meta(queue, dict(i=2, meta=dict(hosts="localhost0")))
+    put_event_with_meta(queue, dict(i=3, meta=dict(hosts="localhost0")))
+    put_event_with_meta(queue, dict(i=4, meta=dict(hosts="localhost0")))
+    put_event_with_meta(queue, dict(i=5, meta=dict(hosts="localhost0")))
     queue.put_nowait(Shutdown())
 
     await run_rulesets(
@@ -528,8 +552,8 @@ async def test_run_assert_facts():
         temp.write(yaml.dump(inventory))
         temp.flush()
         queue = ruleset_queues[0][1]
-        queue.put_nowait(dict())
-        queue.put_nowait(dict(i=1, meta=dict(hosts="localhost")))
+        put_event_with_meta(queue, dict())
+        put_event_with_meta(queue, dict(i=1, meta=dict(hosts="localhost")))
         queue.put_nowait(Shutdown())
         await run_rulesets(
             event_log,
