@@ -131,7 +131,7 @@ async def run(parsed_args: argparse.Namespace) -> None:
         await validate_controller_params(startup_args)
 
     if parsed_args.websocket_url:
-        event_log = asyncio.Queue()
+        event_log = asyncio.Queue(maxsize=50)
     else:
         event_log = NullQueue()
 
