@@ -21,7 +21,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from drools.dispatch import establish_async_channel, handle_async_messages
-from drools.ruleset import session_stats, shutdown as drools_shutdown
+from drools.ruleset import (
+    get_ha_stats,
+    session_stats,
+    shutdown as drools_shutdown,
+)
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -33,20 +37,23 @@ from ansible_rulebook.collection import (
     has_source_filter,
     split_collection_name,
 )
+from ansible_rulebook.conf import settings
 from ansible_rulebook.messages import Shutdown
-from ansible_rulebook.persistence import enable_leader, enable_persistence
+from ansible_rulebook.persistence import enable_persistence
 from ansible_rulebook.rule_set_runner import RuleSetRunner
 from ansible_rulebook.rule_types import (
     EventSource,
     EventSourceFilter,
     RuleSetQueue,
 )
+from ansible_rulebook.source_manager import SourceManager
 from ansible_rulebook.util import (
     collect_ansible_facts,
     find_builtin_filter,
     find_builtin_source,
     has_builtin_filter,
     has_builtin_source,
+    send_ha_stats,
     send_session_stats,
     substitute_variables,
 )
@@ -72,6 +79,9 @@ async def heartbeat_task(
     while True:
         for name in rule_set_names:
             await send_session_stats(event_log, session_stats(name))
+
+        if settings.leader_enabled:
+            await send_ha_stats(event_log, get_ha_stats())
         await asyncio.sleep(interval)
 
 
@@ -327,10 +337,14 @@ async def run_rulesets(
     for ruleset_queue_plan in rulesets_queue_plans:
         logger.debug("ruleset define: %s", ruleset_queue_plan.ruleset.define())
 
+    # NOTE: enable_leader() is now called in SourceManager.start_sources()
+    # after waiting for rulesets to be fully initialized. This ensures
+    # proper ordering for both first worker (no contention) and subsequent
+    # workers (blocked waiting for leadership).
+
     hosts_facts = []
     ruleset_names = []
     rulesets = {}
-    enable_leader()
     for ruleset, _, _ in ruleset_queues:
         if ruleset.gather_facts and not hosts_facts:
             if inventory:
@@ -362,11 +376,29 @@ async def run_rulesets(
             parsed_args=parsed_args,
             broadcast_method=broadcast,
         )
-        task_name = f"main_ruleset :: {ruleset_queue_plan.ruleset.name}"
+        task_name = "main_ruleset::" + f"{ruleset_queue_plan.ruleset.name}"
         ruleset_task = asyncio.create_task(
             ruleset_runner.run_ruleset(), name=task_name
         )
         ruleset_tasks.append(ruleset_task)
+
+    # Yield control briefly to allow ruleset tasks to initialize
+    # This ensures prime_facts() and event loops are ready
+    await asyncio.sleep(0)
+
+    # Signal to SourceManager that rulesets are fully initialized
+    # This allows start_sources() to proceed with enable_leader() when ready
+    try:
+        source_manager = SourceManager.get_instance()
+        source_manager.signal_rulesets_ready()
+        logger.info(
+            "Signaled to SourceManager that %d rulesets are ready",
+            len(ruleset_tasks),
+        )
+    except Exception as e:
+        logger.warning(
+            "Could not signal rulesets ready to SourceManager: %s", e
+        )
 
     monitor_task = None
     if file_monitor:

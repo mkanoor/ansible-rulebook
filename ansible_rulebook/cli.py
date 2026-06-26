@@ -146,10 +146,29 @@ def get_parser() -> argparse.ArgumentParser:
         "the results to be communicated back to the websocket.",
     )
     parser.add_argument(
-        "--persistence-id",
-        help="Identifier, the persistence id which allows "
-        "for the data to be saved across multiple restarts.",
+        "--worker-name",
+        help="Worker name for tracking leader election and persistence. "
+        "Defaults to 'instance-{id}' if not provided. "
+        "Used in logs to identify the current leader.",
     )
+
+    # Create mutually exclusive group for HA vs persistence-only modes
+    persistence_group = parser.add_mutually_exclusive_group()
+    persistence_group.add_argument(
+        "--ha-uuid",
+        dest="ha_uuid",
+        help="HA activation UUID. Enables BOTH persistence and leader election. "
+        "All instances with the same ha-uuid form an HA group where only the "
+        "elected leader starts sources. Requires PostgreSQL configuration "
+        "(drools_db_* variables).",
+    )
+    persistence_group.add_argument(
+        "--persistence-id",
+        help="Persistence ID for state storage only (no leader election). "
+        "Use this for single-instance persistence or when HA is managed externally. "
+        "Cannot be used with --ha-uuid.",
+    )
+
     parser.add_argument(
         "-w",
         "--worker",

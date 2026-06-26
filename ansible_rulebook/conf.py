@@ -97,6 +97,7 @@ class _Settings:
         self.max_back_pressure_timeout = 3600
         self.max_reporting_queue_size = 50
         self.max_batch_job_polling_size = 25
+        self.leader_enabled = False
 
         self.update_from_env()
 

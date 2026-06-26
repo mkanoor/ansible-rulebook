@@ -123,18 +123,21 @@ class RuleSetRunner:
         self.back_pressure_manager = BackPressureManager(event_log)
 
     async def run_ruleset(self):
+
         tasks = []
         try:
             prime_facts(self.name, self.hosts_facts)
             task_name = (
-                f"action_plan_task:: {self.ruleset_queue_plan.ruleset.name}"
+                "action_plan_task::"
+                + f"{self.ruleset_queue_plan.ruleset.name}"
             )
             self.action_loop_task = asyncio.create_task(
                 self._drain_actionplan_queue(), name=task_name
             )
             tasks.append(self.action_loop_task)
             task_name = (
-                f"source_reader_task:: {self.ruleset_queue_plan.ruleset.name}"
+                "source_reader_task::"
+                + f"{self.ruleset_queue_plan.ruleset.name}"
             )
             self.source_loop_task = asyncio.create_task(
                 self._drain_source_queue(), name=task_name
@@ -425,8 +428,8 @@ class RuleSetRunner:
         last_action: bool = True,
     ) -> asyncio.Task:
         task_name = (
-            f"action::{action.action}::"
-            f"{self.ruleset_queue_plan.ruleset.name}::"
+            "action::" + f"{action.action}" + "::"
+            f"{self.ruleset_queue_plan.ruleset.name}" + "::"
             f"{action_item.rule}"
         )
         logger.debug("Creating action task %s", task_name)

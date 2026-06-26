@@ -19,7 +19,7 @@ import os
 import sys
 import traceback
 from asyncio.exceptions import CancelledError
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import yaml
 
@@ -31,9 +31,10 @@ from ansible_rulebook.collection import (
 )
 from ansible_rulebook.common import StartupArgs
 from ansible_rulebook.conf import DEFAULT_MAX_CONCURRENT_ACTIONS, settings
-from ansible_rulebook.engine import run_rulesets, start_source
+from ansible_rulebook.engine import run_rulesets
 from ansible_rulebook.job_template_runner import job_template_runner
-from ansible_rulebook.rule_types import EventSource, RuleSet, RuleSetQueue
+from ansible_rulebook.rule_types import RuleSet
+from ansible_rulebook.source_manager import SourceManager
 from ansible_rulebook.util import (
     decryptable,
     decrypted_context,
@@ -51,12 +52,10 @@ from ansible_rulebook.websocket import (
 
 from .exception import (
     ControllerNeededException,
-    DuplicateSourceNamesException,
     InvalidUrlException,
     InventoryNeededException,
     InventoryNotFound,
     RulebookNotFoundException,
-    SourcePluginFeedbackMisconfiguredException,
     WebSocketExchangeException,
 )
 
@@ -72,6 +71,7 @@ class NullQueue:
         self.maxsize = 0
 
     async def put(self, _data):
+        print(_data)
         pass
 
     def qsize(self):
@@ -153,33 +153,103 @@ async def run(parsed_args: argparse.Namespace) -> None:
     else:
         event_log = NullQueue()
 
-    logger.info("Starting sources")
-    tasks, ruleset_queues = spawn_sources(
-        startup_args.rulesets,
-        startup_args.variables,
-        [parsed_args.source_dir],
-        parsed_args.shutdown_delay,
-        [parsed_args.filter_dir],
+    # Enable persistence if HA mode or persistence-only mode
+    from ansible_rulebook.persistence import enable_persistence
+
+    enable_persistence(parsed_args, startup_args.variables)
+
+    # Create leader election if in HA mode (ha_uuid specified)
+    leader_election = None
+    if hasattr(parsed_args, "ha_uuid") and parsed_args.ha_uuid:
+        from ansible_rulebook.leader_election import (
+            create_leader_election_from_ha_uuid,
+        )
+
+        worker_id = (
+            parsed_args.worker_name
+            if hasattr(parsed_args, "worker_name") and parsed_args.worker_name
+            else f"instance-{parsed_args.id}"
+            if hasattr(parsed_args, "id")
+            else "worker-unknown"
+        )
+
+        leader_election = create_leader_election_from_ha_uuid(
+            ha_uuid=parsed_args.ha_uuid,
+            worker_id=worker_id,
+            variables=startup_args.variables,
+            poll_interval=float(
+                startup_args.variables.get(
+                    "leader_election_poll_interval", 5.0
+                )
+            ),
+        )
+
+        if leader_election is None:
+            logger.error(
+                "HA mode requires PostgreSQL configuration. "
+                "Cannot proceed without drools_db_* variables."
+            )
+            raise Exception("PostgreSQL configuration missing for HA mode")
+
+        logger.info(f"HA mode enabled with ha_uuid: {parsed_args.ha_uuid}")
+        # Start election process in background
+        asyncio.create_task(
+            leader_election.start(
+                on_became_leader=lambda: logger.info("🎯 Became LEADER"),
+                on_lost_leadership=lambda: logger.warning(
+                    "⚠️ Lost LEADERSHIP"
+                ),
+            ),
+            name="leader_election",
+        )
+
+    # Use SourceManager for unified source lifecycle management
+    source_manager = SourceManager.get_instance()
+
+    # Phase 1: Initialize (creates queues, prepares infrastructure)
+    logger.info("Initializing sources and queues")
+    ruleset_queues = source_manager.initialize(
+        rulesets=startup_args.rulesets,
+        variables=startup_args.variables,
+        source_dirs=[parsed_args.source_dir],
+        shutdown_delay=parsed_args.shutdown_delay,
+        filter_dirs=[parsed_args.filter_dir],
+        leader_election=leader_election,
+        event_log=event_log,
     )
 
+    # Start rulesets as background task
+    # (SourceManager will wait for them in HA mode)
     logger.info("Starting rules")
+    ruleset_task = asyncio.create_task(
+        run_rulesets(
+            event_log,
+            ruleset_queues,
+            startup_args.variables,
+            startup_args.inventory,
+            parsed_args,
+            startup_args.project_data_file,
+            file_monitor,
+        ),
+        name="rulesets",
+    )
 
+    # Setup feedback task if websocket is configured
     feedback_task = None
     if parsed_args.websocket_url:
         feedback_task = asyncio.create_task(
-            send_event_log_to_websocket(event_log=event_log)
+            send_event_log_to_websocket(event_log=event_log),
+            name="feedback_task",
         )
-        tasks.append(feedback_task)
 
-    should_reload = await run_rulesets(
-        event_log,
-        ruleset_queues,
-        startup_args.variables,
-        startup_args.inventory,
-        parsed_args,
-        startup_args.project_data_file,
-        file_monitor,
-    )
+    # Phase 2: Start sources
+    # In HA mode: This waits for rulesets ready + leadership
+    # In non-HA mode: This starts immediately
+    logger.info("Starting sources")
+    tasks = await source_manager.start_sources()
+
+    # Wait for rulesets to complete
+    should_reload = await ruleset_task
 
     if feedback_task:
         try:
@@ -198,6 +268,10 @@ async def run(parsed_args: argparse.Namespace) -> None:
     else:
         await event_log.put({"type": "Exit"})
 
+    # Stop sources gracefully (broadcasts shutdown)
+    logger.info("Stopping sources")
+    await source_manager.stop_sources("Rulebook execution completed")
+
     logger.info("Cancelling event source tasks")
     for task in tasks:
         task.cancel()
@@ -212,6 +286,9 @@ async def run(parsed_args: argparse.Namespace) -> None:
                 type(result), result, result.__traceback__
             )
             error_found = True
+
+    # Cleanup SourceManager
+    await source_manager.cleanup()
 
     logger.info("Main complete")
     await job_template_runner.close_session()
@@ -283,67 +360,6 @@ def load_rulebook(
         )
 
     return rulesets
-
-
-def spawn_sources(
-    rulesets: List[RuleSet],
-    variables: Dict[str, Any],
-    source_dirs: List[str],
-    shutdown_delay: float,
-    filter_dirs: List[str],
-) -> Tuple[List[asyncio.Task], List[RuleSetQueue]]:
-    tasks = []
-    ruleset_queues = []
-    for ruleset in rulesets:
-        source_queue = asyncio.Queue(1)
-        source_feedback_queues = {}
-        source_names = []
-        for source in ruleset.sources:
-            feedback_queue = _get_feedback_queue(
-                source, source_names, source_feedback_queues
-            )
-            if feedback_queue:
-                source_feedback_queues[source.name] = feedback_queue
-
-            source_names.append(source.name)
-            task = asyncio.create_task(
-                start_source(
-                    source,
-                    source_dirs,
-                    variables,
-                    source_queue,
-                    shutdown_delay,
-                    filter_dirs,
-                    feedback_queue,
-                )
-            )
-            tasks.append(task)
-        ruleset_queues.append(
-            RuleSetQueue(ruleset, source_queue, source_feedback_queues)
-        )
-    return tasks, ruleset_queues
-
-
-def _get_feedback_queue(
-    source: EventSource,
-    source_names: List[str],
-    source_feedback_queues: Dict[str, asyncio.Queue],
-) -> Optional[asyncio.Queue]:
-    if not source.source_args:
-        return None
-
-    if not source.source_args.get("feedback", False):
-        return None
-
-    if settings.persistence_id is None:
-        raise SourcePluginFeedbackMisconfiguredException(
-            source_name=source.name
-        )
-
-    if source.name in source_feedback_queues or source.name in source_names:
-        raise DuplicateSourceNamesException(source_name=source.name)
-
-    return asyncio.Queue(1)
 
 
 def validate_variables(startup_args: StartupArgs) -> None:

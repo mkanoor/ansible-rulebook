@@ -54,8 +54,9 @@ def enable_persistence(
 
     if parsed_args is None:
         return
-    if parsed_args.persistence_id is None:
+    if parsed_args.persistence_id is None and parsed_args.ha_uuid is None:
         return
+
     # Try to get database parameters, first from PostgreSQL config, then H2
     db_params = _get_postgres_params(variables) or _get_h2_params(variables)
     if db_params is None:
@@ -64,8 +65,20 @@ def enable_persistence(
 
     # This should be a UUID but the backend currently does not
     # use UUID's it uses integer ids
-    activation_uuid = f"{parsed_args.persistence_id}"
-    worker_name = f"instance-{parsed_args.id}"
+    if parsed_args.ha_uuid:
+        activation_uuid = parsed_args.ha_uuid
+    else:
+        activation_uuid = f"{parsed_args.persistence_id}"
+
+    # Use --worker-name if provided, otherwise default to instance-{id}
+    if hasattr(parsed_args, "worker_name") and parsed_args.worker_name:
+        worker_name = parsed_args.worker_name
+    else:
+        worker_name = (
+            f"instance-{parsed_args.id}"
+            if parsed_args.id
+            else "worker-unknown"
+        )
 
     # Get additional configuration parameters like sync intervals
     # and encryption
@@ -73,7 +86,7 @@ def enable_persistence(
 
     logger.info(
         "Initializing drools HA mode: worker_id=%s, database=%s, ha_uuid=%s",
-        activation_uuid,
+        worker_name,
         db_params["db_type"],
         activation_uuid,
     )
@@ -187,6 +200,22 @@ def enable_leader():
     """
     if settings.persistence_enabled:
         lang.enable_leader()
+
+
+def disable_leader():
+    """
+    Disable leader status for this rulebook instance.
+
+    In HA mode, this function is called when the current instance loses
+    leadership. This allows the drools engine to stop leader-specific
+    operations and coordinate with other workers appropriately.
+
+    Returns:
+        None. Disables leader mode in the drools engine if persistence
+        is enabled.
+    """
+    if settings.persistence_enabled:
+        lang.disable_leader()
 
 
 def _get_postgres_params(variables: dict) -> Optional[dict]:

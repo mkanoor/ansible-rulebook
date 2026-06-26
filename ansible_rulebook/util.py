@@ -345,6 +345,19 @@ async def send_session_stats(event_log: asyncio.Queue, stats: Dict):
         )
 
 
+async def send_ha_stats(event_log: asyncio.Queue, stats: Dict):
+    if stats:
+        await event_log.put(
+            dict(
+                type="HighAvailabilityStats",
+                activation_id=settings.identifier,
+                activation_instance_id=settings.identifier,
+                stats=stats,
+                reported_at=run_at(),
+            )
+        )
+
+
 def create_inventory(runner_inventory_dir: str, inventory: str) -> str:
     if os.path.isfile(inventory):
         shutil.copy(os.path.abspath(inventory), runner_inventory_dir)

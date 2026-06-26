@@ -17,8 +17,8 @@ The `ansible-rulebook` CLI supports the following options:
                         [--shutdown-delay SHUTDOWN_DELAY] [--gc-after GC_AFTER] [--heartbeat HEARTBEAT]
                         [--execution-strategy {sequential,parallel}] [--hot-reload] [--skip-audit-events]
                         [--vault-password-file VAULT_PASSWORD_FILE] [--vault-id VAULT_ID] [--ask-vault-pass]
-                        [-F FILTER_DIR]
-                        [--persistence-id PERSISTENCE_ID]
+                        [-F FILTER_DIR] [--worker-name WORKER_NAME]
+                        [--persistence-id PERSISTENCE_ID | --ha-uuid HA_UUID]
                         [--controller-retry-max-timeout CONTROLLER_RETRY_MAX_TIMEOUT]
                         [--controller-retry-attempts CONTROLLER_RETRY_ATTEMPTS]
                         [-m MAX_CONCURRENT_ACTIONS] [--max-back-pressure-timeout MAX_BACK_PRESSURE_TIMEOUT]
@@ -51,6 +51,8 @@ The `ansible-rulebook` CLI supports the following options:
     --websocket-token-url WEBSOCKET_TOKEN_URL
                             Url to renew websocket access token, can also be passed via the env var EDA_WEBSOCKET_TOKEN_URL
     --id ID               Identifier, the activation_instance id which allows the results to be communicated back to the websocket.
+    --worker-name WORKER_NAME
+                          Worker name for tracking leader election and persistence. Defaults to 'instance-{id}' if not provided. Used in logs to identify the current leader.
     -w, --worker          Enable worker mode
     -T PROJECT_TARBALL, --project-tarball PROJECT_TARBALL
                             A tarball of the project
@@ -77,9 +79,11 @@ The `ansible-rulebook` CLI supports the following options:
     --vault-password-file VAULT_PASSWORD_FILE
                             The file containing one ansible vault password, can also be passed via the env var EDA_VAULT_PASSWORD_FILE.
     --vault-id VAULT_ID   label@filename pointing to an ansible vault password file
-    --ask-vault-pass      Ask vault password interactively 
+    --ask-vault-pass      Ask vault password interactively
     --persistence-id   PERSISTENCE_ID
-                         The unique id, preferably a UUID to track persistent event data
+                         The unique id, preferably a UUID to track persistent event data. Enables persistence-only mode (no leader election). Cannot be used with --ha-uuid.
+    --ha-uuid HA_UUID
+                         HA activation UUID. Enables BOTH persistence and leader election. All instances with the same ha-uuid form an HA group where only the elected leader starts event sources. Requires PostgreSQL configuration (drools_db_* variables). Cannot be used with --persistence-id.
     --controller-retry-max-timeout CONTROLLER_RETRY_MAX_TIMEOUT
                             Maximum backoff time in seconds for controller API retries on transient errors (429/502/503/504). Default is 60. Can also be passed via env var EDA_CONTROLLER_RETRY_MAX_TIMEOUT
     --controller-retry-attempts CONTROLLER_RETRY_ATTEMPTS
