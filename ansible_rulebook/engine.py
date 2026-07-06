@@ -18,6 +18,7 @@ import logging
 import os
 import runpy
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from drools.dispatch import establish_async_channel, handle_async_messages
@@ -42,6 +43,7 @@ from ansible_rulebook.rule_types import (
     RuleSetQueue,
 )
 from ansible_rulebook.util import (
+    add_to_sys_path,
     collect_ansible_facts,
     find_builtin_filter,
     find_builtin_source,
@@ -132,13 +134,13 @@ async def start_source(
                 os.path.join(source_dirs[0], source.source_name + ".py")
             )
         ):
-            module = runpy.run_path(
+            module = local_runpy(
                 os.path.join(source_dirs[0], source.source_name + ".py")
             )
         elif has_builtin_source(source.source_name):
-            module = runpy.run_path(find_builtin_source(source.source_name))
+            module = local_runpy(find_builtin_source(source.source_name))
         elif has_source(*split_collection_name(source.source_name)):
-            module = runpy.run_path(
+            module = local_runpy(
                 find_source(*split_collection_name(source.source_name))
             )
         else:
@@ -159,7 +161,7 @@ async def start_source(
                     )
                 )
             ):
-                source_filter_module = runpy.run_path(
+                source_filter_module = local_runpy(
                     os.path.join(
                         filter_dirs[0], source_filter.filter_name + ".py"
                     )
@@ -167,7 +169,7 @@ async def start_source(
             elif os.path.exists(
                 os.path.join("event_filter", source_filter.filter_name + ".py")
             ):
-                source_filter_module = runpy.run_path(
+                source_filter_module = local_runpy(
                     os.path.join(
                         "event_filter", source_filter.filter_name + ".py"
                     )
@@ -175,13 +177,13 @@ async def start_source(
             elif has_source_filter(
                 *split_collection_name(source_filter.filter_name)
             ):
-                source_filter_module = runpy.run_path(
+                source_filter_module = local_runpy(
                     find_source_filter(
                         *split_collection_name(source_filter.filter_name)
                     )
                 )
             elif has_builtin_filter(source_filter.filter_name):
-                source_filter_module = runpy.run_path(
+                source_filter_module = local_runpy(
                     find_builtin_filter(source_filter.filter_name)
                 )
             else:
@@ -362,7 +364,7 @@ async def run_rulesets(
             parsed_args=parsed_args,
             broadcast_method=broadcast,
         )
-        task_name = f"main_ruleset :: {ruleset_queue_plan.ruleset.name}"
+        task_name = "main_ruleset :: " + f"{ruleset_queue_plan.ruleset.name}"
         ruleset_task = asyncio.create_task(
             ruleset_runner.run_ruleset(), name=task_name
         )
@@ -404,3 +406,9 @@ def meta_info_filter(source: EventSource) -> EventSourceFilter:
         source_name=source.name, source_type=source.source_name
     )
     return EventSourceFilter(source_filter_name, source_filter_args)
+
+
+def local_runpy(target_file: str):
+    target_dir = Path(target_file).parent
+    with add_to_sys_path(target_dir):
+        return runpy.run_path(target_file)

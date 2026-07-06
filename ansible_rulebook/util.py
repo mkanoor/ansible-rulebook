@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import typing
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
@@ -532,3 +533,17 @@ def strtobool(value: str) -> bool:
     if value.lower() in ("y", "yes", "on", "1", "true", "t"):
         return True
     return False
+
+
+@contextmanager
+def add_to_sys_path(path):
+    """Temporarily add a directory to sys.path to allow relative imports."""
+    import_path = os.path.abspath(path)
+    inserted = import_path not in sys.path
+    if inserted:
+        sys.path.insert(0, import_path)
+    try:
+        yield
+    finally:
+        if inserted:
+            sys.path.remove(import_path)
