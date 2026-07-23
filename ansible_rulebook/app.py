@@ -82,7 +82,7 @@ class NullQueue:
 
 
 logger = logging.getLogger(__name__)
-INVENTORY_ACTIONS = ("run_playbook", "run_module")
+INVENTORY_ACTIONS = "run_playbook"
 CONTROLLER_ACTIONS = ("run_job_template", "run_workflow_template")
 
 

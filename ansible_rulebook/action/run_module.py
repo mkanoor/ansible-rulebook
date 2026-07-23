@@ -23,6 +23,11 @@ from .run_playbook import RunPlaybook
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODULE_INVENTORY = {
+    "all": {"hosts": {"localhost": {"ansible_connection": "local"}}}
+}
+DEFAULT_HOST = "localhost"
+
 
 class RunModule(RunPlaybook):
     """run_module runs an ansible module using the ansible runner"""
@@ -43,12 +48,22 @@ class RunModule(RunPlaybook):
         await super()._pre_process()
         self.playbook = os.path.join(self.private_data_dir, "wrapper.yml")
         self._wrap_module_in_playbook()
+        self._create_localhost_inventory()
 
     def _copy_playbook_files(self, project_dir):
         pass
 
     def _runner_args(self):
         return {"playbook": self.playbook, "inventory": self.inventory}
+
+    def _create_localhost_inventory(self) -> None:
+        if self.inventory is None:
+            self.inventory = os.path.join(
+                self.private_data_dir, "module_inventory.yml"
+            )
+
+            with open(self.inventory, "w") as f:
+                yaml.dump(DEFAULT_MODULE_INVENTORY, f)
 
     def _wrap_module_in_playbook(self) -> None:
         module_args = self.action_args.get("module_args", {})
