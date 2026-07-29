@@ -192,6 +192,10 @@ class RunWorkflowTemplate:
             facts = self.controller_job.get("artifacts", {})
             if facts:
                 facts = self.helper.embellish_internal_event(facts)
+                facts = {
+                    **facts,
+                    **self.action_args.get("post_event_extra_vars", {}),
+                }
                 self.display.output(facts, level=level, pretty=True)
                 if set_facts:
                     lang.assert_fact(ruleset, facts)

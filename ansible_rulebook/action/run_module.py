@@ -72,7 +72,10 @@ class RunModule(RunPlaybook):
             self.name: module_args,
             "register": self.MODULE_OUTPUT_KEY,
         }
-        result_str = "{{ " + self.MODULE_OUTPUT_KEY + " }}"
+        if self.action_args.get("json_mode", False):
+            result_str = "{{ " + self.MODULE_OUTPUT_KEY + ".json }}"
+        else:
+            result_str = "{{ " + self.MODULE_OUTPUT_KEY + " }}"
         set_fact_task = {
             "name": "save result",
             "ansible.builtin.set_fact": {

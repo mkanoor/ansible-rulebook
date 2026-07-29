@@ -247,8 +247,11 @@ class RunPlaybook:
                         f"Missing key: {self.output_key} in artifacts"
                     )
                 fact = fact[self.output_key]
-
             fact = self.helper.embellish_internal_event(fact)
+            fact = {
+                **fact,
+                **self.action_args.get("post_event_extra_vars", {}),
+            }
             self.display.output(fact, level=level, pretty=True)
 
             if set_facts:

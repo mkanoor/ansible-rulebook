@@ -360,6 +360,9 @@
                         },
                         "lock": {
                             "type": "string"
+                        },
+                        "post_event_extra_vars": {
+                            "type": "object"
                         }
                     },
                     "required": [
@@ -420,6 +423,9 @@
                         },
                         "lock": {
                             "type": "string"
+                        },
+                        "post_event_extra_vars": {
+                            "type": "object"
                         }
                     },
                     "required": [
@@ -485,6 +491,9 @@
                         "add_event_uuid_label": {
                             "type": "boolean",
                             "default": false
+                        },
+                        "post_event_extra_vars": {
+                            "type": "object"
                         }
                     },
                     "required": [
@@ -551,6 +560,9 @@
                         "add_event_uuid_label": {
                             "type": "boolean",
                             "default": false
+                        },
+                        "post_event_extra_vars": {
+                            "type": "object"
                         }
                     },
                     "required": [
